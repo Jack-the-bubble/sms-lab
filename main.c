@@ -4,6 +4,10 @@
 #include "delay.h"
 #include "stdio.h"
 #include <stdbool.h>   // true, false
+#include "stm32f10x_gpio.h"
+
+unsigned char bufor[10] = "";
+unsigned char pad_result[10] = "";
 
 bool RCC_Config(void);
 void GPIO_Config(void);
@@ -13,16 +17,12 @@ void ADC_Config(void);
 void GPIO_KB_Config(void);
 void NVIC_Config(void);
 //void refreshLCD(void);
-//char KB2char(void);
-char bufor[10] = "";
-uint16_t counter = 0;
-char klawisz[3] = "";
+void SysTick_Configure(void);
 
-int main(void) {	
-	
-	
-	
-	RCC_Config();	      // konfiguracja RCC
+// char KB2char(void);
+
+int main(void) {
+  RCC_Config();	      // konfiguracja RCC
   NVIC_Config();      // konfiguracja NVIC
   GPIO_Config();      // konfiguracja GPIO
   GPIO_TIM4_Config(); // konfiguracja TIM4
@@ -32,25 +32,24 @@ int main(void) {
 	
   LCD_Initialize();   // inicjalizacja LCD
 	
-	
-	
-	SysTick_Config(9000);
-	SysTick_CLKSourceConfig(SysTick_CLKSource_HCLK_Div8);
-	NVIC_SetPriority(SysTick_IRQn, 0);
+	SysTick_Configure();
+	//SysTick_CLKSourceConfig(TODO);
+	//NVIC_SetPriority(SysTick_IRQn, TODO);
 	
 	while(1) {
 		LED(LED1, LED_TOGGLE);
-		Delay(500);
-		if (counter == 5) refreshLCD();
+		Delay(1000);
+		// TODO
+	//	pad_result[0] = KB2char();
+		refreshLCD();
 	}
 }
 
 void refreshLCD(void){
-	counter = 0;
 	LCD_GoTo(0,0);
 	LCD_WriteText(bufor);
 	LCD_GoTo(0,1);
-	LCD_WriteText(klawisz);
+	LCD_WriteText(pad_result);
 }
 
 bool RCC_Config(void) {
@@ -113,7 +112,7 @@ void ADC_Config(void){
 	
 	// wlaczenie przerwan timera TIM2
 	TIM_ITConfig ( TIM2 , TIM_IT_CC2 , ENABLE );
-	TIM_Cmd (TIM2 , ENABLE ) ;
+	TIM_Cmd (TIM2 , ENABLE ) ;	
 	
 	// konfiguracja ADC1
 	ADC_DeInit ( ADC1 ) ; // reset ustawien ADC1
@@ -148,7 +147,7 @@ void NVIC_Config(void) {
 	
 	// konfiguracja NVIC dla ADC1
 	NVIC_ClearPendingIRQ ( ADC1_2_IRQn ) ; // czyszcz . bitu przerw .
-	NVIC_EnableIRQ ( ADC1_2_IRQn ) ; // wlaczenie przerwania
+	NVIC_EnableIRQ (ADC1_2_IRQn); // wlaczenie przerwania
 	NVIC_InitStructure . NVIC_IRQChannel = ADC1_2_IRQn ; // przerwanie EXTI0_IRQn
 	NVIC_InitStructure . NVIC_IRQChannelPreemptionPriority = 1; // prior . wywlaszczania
 	NVIC_InitStructure . NVIC_IRQChannelSubPriority = 2; // podpriorytet
@@ -158,49 +157,44 @@ void NVIC_Config(void) {
 	// konfiguracja NVIC dla EXTI0
 	NVIC_ClearPendingIRQ ( EXTI0_IRQn ) ; // czyszcz . bitu przerw .
 	NVIC_EnableIRQ ( EXTI0_IRQn ) ; // wlaczenie przerwania
-	NVIC_InitStructure . NVIC_IRQChannel = EXTI0_IRQn ; // przerwanie EXTI0_IRQn
-	NVIC_InitStructure . NVIC_IRQChannelPreemptionPriority = 0; // prior . wywlaszczania
-	NVIC_InitStructure . NVIC_IRQChannelSubPriority = 0; // podpriorytet
-	NVIC_InitStructure . NVIC_IRQChannelCmd = ENABLE ; // aktywowanie konfig .
-	NVIC_Init (& NVIC_InitStructure ) ; // inicjalizacja
+	NVIC_InitStructure.NVIC_IRQChannel = EXTI0_IRQn ; // przerwanie EXTI0_IRQn
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0; // prior . wywlaszczania
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0; // podpriorytet
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE ; // aktywowanie konfig .
+	NVIC_Init(&NVIC_InitStructure) ; // inicjalizacja
 	
 	// konfiguracja NVIC dla EXTI9_5
-	NVIC_ClearPendingIRQ ( EXTI9_5_IRQn ) ; // czyszcz . bitu przerw .
-	NVIC_EnableIRQ ( EXTI9_5_IRQn ) ; // wlaczenie przerwania
-	NVIC_InitStructure . NVIC_IRQChannel = EXTI9_5_IRQn ; // przerwanie EXTI0_IRQn
-	NVIC_InitStructure . NVIC_IRQChannelPreemptionPriority = 1; // prior . wywlaszczania
-	NVIC_InitStructure . NVIC_IRQChannelSubPriority = 1; // podpriorytet
-	NVIC_InitStructure . NVIC_IRQChannelCmd = ENABLE ; // aktywowanie konfig .
-	NVIC_Init (& NVIC_InitStructure ) ; // inicjalizacja
+	NVIC_ClearPendingIRQ(EXTI9_5_IRQn) ; // czyszcz . bitu przerw .
+	NVIC_EnableIRQ(EXTI9_5_IRQn) ; // wlaczenie przerwania
+	NVIC_InitStructure.NVIC_IRQChannel = EXTI9_5_IRQn ; // przerwanie EXTI0_IRQn
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1; // prior . wywlaszczania
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1; // podpriorytet
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE ; // aktywowanie konfig .
+	NVIC_Init(&NVIC_InitStructure); // inicjalizacja
 	
 	// konfiguracja NVIC dla TIM3
-	NVIC_ClearPendingIRQ ( TIM3_IRQn ) ; // czyszcz . bitu przerw .
-	NVIC_EnableIRQ ( TIM3_IRQn ) ; // wlaczenie przerwania
-	NVIC_InitStructure . NVIC_IRQChannel = TIM3_IRQn ; // nazwa przerwania
-	NVIC_InitStructure . NVIC_IRQChannelPreemptionPriority = 1; // prior . wywlaszczania
-	NVIC_InitStructure . NVIC_IRQChannelSubPriority = 1; // podpriorytet
-	NVIC_InitStructure . NVIC_IRQChannelCmd = ENABLE ; // aktywowanie konfig .
-	NVIC_Init (& NVIC_InitStructure ) ; // inicjalizacja
+	NVIC_ClearPendingIRQ( TIM3_IRQn ) ; // czyszcz . bitu przerw .
+	NVIC_EnableIRQ( TIM3_IRQn ) ; // wlaczenie przerwania
+	NVIC_InitStructure.NVIC_IRQChannel = TIM3_IRQn ; // nazwa przerwania
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1; // prior . wywlaszczania
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1; // podpriorytet
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE ; // aktywowanie konfig .
+	NVIC_Init(&NVIC_InitStructure ) ; // inicjalizacja
 	
 	// konfiguracja NVIC dla TIM4
 	NVIC_ClearPendingIRQ ( TIM4_IRQn ) ; // wyczyszczenie bitu przerwania
 	NVIC_EnableIRQ ( TIM4_IRQn ) ; // wlaczenie obslugi przerwania
-	NVIC_InitStructure . NVIC_IRQChannel = TIM4_IRQn ; // nazwa przerwania
-	NVIC_InitStructure . NVIC_IRQChannelPreemptionPriority = 2; // priorytet wywlaszczania
-	NVIC_InitStructure . NVIC_IRQChannelSubPriority = 1; // podpriorytet
-	NVIC_InitStructure . NVIC_IRQChannelCmd = ENABLE ; // wlaczenie
-	
-	// inicjalizacja struktury
-	NVIC_Init (&NVIC_InitStructure); 
+	NVIC_InitStructure.NVIC_IRQChannel = TIM4_IRQn ; // nazwa przerwania
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 2; // priorytet wywlaszczania
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1; // podpriorytet
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE ; // wlaczenie
+	NVIC_Init(&NVIC_InitStructure);
 }
 
 void GPIO_Config(void) {
   // konfigurowanie portow GPIO
   GPIO_InitTypeDef  GPIO_InitStructure; 
   
-	// PB6 -- przycisk zewnetrzny bez podciagniecia
-	// TODO
-	
 	// PD10-13 -- klawiatura
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11 | GPIO_Pin_12 | GPIO_Pin_13; // piny 10-13
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz; // czestotliwosc zmiany 2 MHz
@@ -209,15 +203,13 @@ void GPIO_Config(void) {
 	
 	// PD6-9 -- klawiatura
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_9; // piny 6-9
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz; // czestotliwosc zmiany 2 MHz
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
 	GPIO_Init (GPIOD, &GPIO_InitStructure); // inicjalizacja portu D
 	
-	GPIO_EXTILineConfig (GPIO_PortSourceGPIOD, GPIO_PinSource6); // PA6 -> EXTI9_5_IRQn
-	GPIO_EXTILineConfig (GPIO_PortSourceGPIOD, GPIO_PinSource7); // PA7 -> EXTI9_5_IRQn
-	GPIO_EXTILineConfig (GPIO_PortSourceGPIOD, GPIO_PinSource8); // PA8 -> EXTI9_5_IRQn
-	GPIO_EXTILineConfig (GPIO_PortSourceGPIOD, GPIO_PinSource9); // PA9 -> EXTI9_5_IRQn
-
+	GPIO_EXTILineConfig(GPIO_PortSourceGPIOD, GPIO_PinSource6); // PA6 -> EXTI9_5_IRQn
+	GPIO_EXTILineConfig(GPIO_PortSourceGPIOD, GPIO_PinSource7); // PA7 -> EXTI9_5_IRQn
+	GPIO_EXTILineConfig(GPIO_PortSourceGPIOD, GPIO_PinSource8); // PA8 -> EXTI9_5_IRQn
+	GPIO_EXTILineConfig(GPIO_PortSourceGPIOD, GPIO_PinSource9); // PA9 -> EXTI9_5_IRQn
 	
 	// LEDALL -- wszystkie diody swiecace (port B)
 	GPIO_InitStructure.GPIO_Pin = LEDALL;
@@ -227,8 +219,6 @@ void GPIO_Config(void) {
 	
 	// PA0 -- przycisk z podciagnieciem (SW0)
 	GPIO_EXTILineConfig ( GPIO_PortSourceGPIOA , GPIO_PinSource0 ) ; // PA0 -> EXTI0_IRQn
-	
-
 }
 
 void GPIO_TIM4_Config(void) {
@@ -241,12 +231,13 @@ void GPIO_TIM4_Config(void) {
 	TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up; // zliczanie w gore
 	TIM_TimeBaseStructure.TIM_RepetitionCounter = 0; // brak powtorzen
 	TIM_TimeBaseInit (TIM4, &TIM_TimeBaseStructure ); // inicjalizacja TIM4
-
+	
+  
   // konfiguracja kanalu 1 timera TIM4
-	TIM_OCInitStructure . TIM_OCMode = TIM_OCMode_Timing ; // brak zmian OCxREF
-	TIM_OCInitStructure . TIM_Pulse = 2000; // wartosc do porownania
-	TIM_OCInitStructure . TIM_OutputState = TIM_OutputState_Enable ; // wlaczenie kanalu
-	TIM_OC1Init (TIM4 , & TIM_OCInitStructure ) ; // inicjalizacja CC1
+	TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_Timing ; // brak zmian OCxREF
+	TIM_OCInitStructure.TIM_Pulse = 2000; // wartosc do porownania
+	TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable ; // wlaczenie kanalu
+	TIM_OC1Init (TIM4 , &TIM_OCInitStructure ) ; // inicjalizacja CC1
 	
   // konfiguracja kanalu 2 timera TIM4
 	TIM_OCInitStructure . TIM_OCMode = TIM_OCMode_Timing ; // brak zmian OCxREF
@@ -254,12 +245,10 @@ void GPIO_TIM4_Config(void) {
 	TIM_OCInitStructure . TIM_OutputState = TIM_OutputState_Enable ; // wlaczenie kanalu
 	TIM_OC2Init (TIM4 , & TIM_OCInitStructure ) ; // inicjalizacja CC2
 	
-	// wlaczenie przerwan timera TIM4
 	TIM_ITConfig (TIM4, TIM_IT_CC1 | TIM_IT_Update , ENABLE ) ;
-	TIM_ITConfig (TIM4, TIM_IT_CC2 | TIM_IT_Update , ENABLE ) ; // wlaczenie przerwan
-	
-	// aktywacja timera TIM4
-	TIM_Cmd (TIM4, ENABLE ); 	
+	TIM_ITConfig (TIM4, TIM_IT_CC2 | TIM_IT_Update , ENABLE ) ;
+	// wlaczenie przerwan timera TIM4
+	TIM_Cmd (TIM4, ENABLE ); 
 }
 
 void GPIO_SW0_Config(void) {
@@ -267,18 +256,19 @@ void GPIO_SW0_Config(void) {
 	EXTI_InitTypeDef EXTI_InitStructure;
 	
 	// konfiguracja EXTI dla PA0
-	EXTI_InitStructure . EXTI_Line = EXTI_Line0 ; // linia : 0
-	EXTI_InitStructure . EXTI_Mode = EXTI_Mode_Interrupt ; // tryb : przerwanie
-	EXTI_InitStructure . EXTI_Trigger = EXTI_Trigger_Falling ; // zbocze : opadajace
-	EXTI_InitStructure . EXTI_LineCmd = ENABLE ; // aktywowanie konfig .
+	GPIO_EXTILineConfig ( GPIO_PortSourceGPIOA , GPIO_PinSource0 ) ;
+	EXTI_InitStructure.EXTI_Line = EXTI_Line0 ; // linia : 0
+	EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt ; // tryb : przerwanie
+	EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling ; // zbocze : opadajace
+	EXTI_InitStructure.EXTI_LineCmd = ENABLE ; // aktywowanie konfig .
 	EXTI_Init (& EXTI_InitStructure ) ; // inicjalizacja
 	
   // konfiguracja timera TIM3 do realizacji opoznienia
-	TIM_TimeBaseStructure . TIM_Prescaler = 7200-1; // 72 MHz /7200=10 kHz
-	TIM_TimeBaseStructure . TIM_Period = 350; // 10 kHz /350~=29 Hz (35 ms)
-	TIM_TimeBaseStructure . TIM_CounterMode = TIM_CounterMode_Up ; // zliczanie w gore
-	TIM_TimeBaseStructure . TIM_RepetitionCounter = 0; // brak powtorzen
-	TIM_TimeBaseInit (TIM3 , & TIM_TimeBaseStructure ) ; // inicjalizacja TIM3
+	TIM_TimeBaseStructure.TIM_Prescaler = 7200-1; // 72 MHz /7200=10 kHz
+	TIM_TimeBaseStructure.TIM_Period = 350; // 10 kHz /350~=29 Hz (35 ms)
+	TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up ; // zliczanie w gore
+	TIM_TimeBaseStructure.TIM_RepetitionCounter = 0; // brak powtorzen
+	TIM_TimeBaseInit (TIM3 , &TIM_TimeBaseStructure ) ; // inicjalizacja TIM3
 	TIM_ITConfig ( TIM3 , TIM_IT_Update , DISABLE ) ; // wylaczenie przerwan
 	TIM_Cmd (TIM3 , DISABLE ) ; // wylaczenie timera
 }
@@ -313,10 +303,10 @@ void GPIO_KB_Config(void) {
 	EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling; // zbocze : opadajace
 	EXTI_InitStructure.EXTI_LineCmd = ENABLE; // aktywowanie konfiguracji
 	EXTI_Init(&EXTI_InitStructure); 
-	
 }
 
 char KB2char(void){
+	int k = 0;
 	unsigned int GPIO_Pin_row, GPIO_Pin_col, i, j;
 	const unsigned char KBkody[16] = {'1','2','3','A',\
 							  '4','5','6','B',\
@@ -327,6 +317,7 @@ char KB2char(void){
 	for(i=0;i<4;++i){
 		GPIO_ResetBits(GPIOD, GPIO_Pin_row);
 		Delay(5); // opoznienie 5 ms na ustalenie sygnalow
+		//for(k ; k<100;k++){};
 		GPIO_Pin_col = GPIO_Pin_6;
 		for(j=0;j<4;++j){
 			if(GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_col) == 0){
@@ -343,6 +334,7 @@ char KB2char(void){
 	return 0;
 }
 
+
 void LED(uint16_t led, enum LED_ACTION act) {
 	switch(act){
 		case LED_ON: GPIO_SetBits(GPIOB, led); break;
@@ -350,4 +342,10 @@ void LED(uint16_t led, enum LED_ACTION act) {
 		case LED_TOGGLE: GPIO_WriteBit(GPIOB, led, 
 			(GPIO_ReadOutputDataBit(GPIOB, led) == Bit_SET?Bit_RESET:Bit_SET));
 	}
+}
+
+void SysTick_Configure(void) {
+	SysTick_Config(9000); // 72 /8 /9000 = 1kHz
+	SysTick_CLKSourceConfig(SysTick_CLKSource_HCLK_Div8);
+	NVIC_SetPriority(SysTick_IRQn, 0);
 }

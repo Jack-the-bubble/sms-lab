@@ -12,16 +12,13 @@
 
 enum LED_ACTION { LED_ON, LED_OFF, LED_TOGGLE };
 
-static const uint16_t V25 = 1750; // gdy V25 =1.41 V dla napi e cia odniesienia 3.3V
-static const uint16_t Avg_Slope = 5; // gdy Avg_Slope =4.3 mV/C dla napi e cia odniesienia 3.3V
-	
 void LED(uint16_t led, enum LED_ACTION act);
-
-extern char bufor[10];
-
-extern uint16_t counter;
-
 void refreshLCD(void);
 char KB2char(void);
+extern unsigned char pad_result[10];
 
-extern char klawisz[3];
+extern unsigned char bufor[10];
+extern uint8_t count;
+
+static const uint16_t V25 = 1750; // gdy V25 =1.41 V dla napi e cia odniesienia 3.3V
+static const uint16_t Avg_Slope = 5; // gdy Avg_Slope =4.3 mV/C dla napi e cia odniesienia 3.3V
