@@ -57,10 +57,24 @@ typedef StaticEventGroup_t osStaticEventGroupDef_t;
 #define TYPE_Y2 5
 #define TYPE_Z1 8
 #define TYPE_Z2 9
+#define TYPE_PROCESS_TIME 50
+#define TASK_MANAGER_COUNTS 51
 typedef struct {
 	uint8_t type;
 	float value;
 } Message;
+
+typedef struct {
+  uint8_t type;
+  uint64_t ticks;
+} TickMessage;
+
+typedef struct {
+  uint8_t type;
+  uint16_t val1; //count for pid V
+  uint16_t val2; // count for pid H
+  uint16_t val3; // count for staticAnimation
+} ManagerMessage;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -145,6 +159,18 @@ const osThreadAttr_t staticAnimation_attributes = {
   .cb_size = sizeof(staticAnimationControlBlock),
   .stack_mem = &staticAnimationBuffer[0],
   .stack_size = sizeof(staticAnimationBuffer),
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for procesManager */
+osThredId_t procesManagerHandle;
+uint32_t procesManagerBuffer[ 1500 ];
+osStaticThreadDef_t procesManagerControlBlock;
+const osThreadAttr_t procesManager_attributes = {
+  .name = "procesManager",
+  .cb_mem = &procesManagerControlBlock,
+  .cb_size = sizeof(procesManagerControlBlock),
+  .stack_mem = &procesManagerBuffer[0],
+  .stack_size = sizeof(procesManagerBuffer),
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for qProcess */
@@ -260,6 +286,7 @@ void task_processDriver(void *argument);
 void task_tsDriver(void *argument);
 void task_controllerV(void *argument);
 void task_staticAnimation(void *argument);
+void task_procesManager(void *argument);
 void timer_process(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -404,6 +431,8 @@ int main(void)
   staticAnimationHandle = osThreadNew(task_staticAnimation, NULL, &staticAnimation_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
+  /* creation of procesManager */
+  procesManagerHandle = osThreadNew(task_procesManager, NULL, &procesManager_attributes);
 	/* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
@@ -953,12 +982,17 @@ void task_ltdcDriver(void *argument)
 {
   /* USER CODE BEGIN 5 */
 	/* Infinite loop */
+  ManagerMessage msg;
+
 	for (;;) {
 
 
 		osEventFlagsWait(eLTDCReadyHandle, 0x00000001U, osFlagsWaitAny,
 		osWaitForever);
 		osSemaphoreAcquire(sLTDCHandle, osWaitForever);
+
+    // get data from proces manager
+    osMessageQueueGet(qProcesManagerHandle, &msg, NULL, osWaitForever);
 
 		// clear all
 		BSP_LCD_SelectLayer(0);
@@ -1000,6 +1034,18 @@ void task_ltdcDriver(void *argument)
 		BSP_LCD_SelectLayer(1); // select colors and fonts for the top layer
 		BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
 		DrawPointOfTouch(&TS_State);
+
+    // draw proces manager bars
+    
+    // pid V
+    BSP_LCD_DrawRect_AtAddr(250, 100, msg.var1, 30, layer[0]);
+
+    // pid H
+    BSP_LCD_DrawRect_AtAddr(250, 140, msg.var2, 30, layer[0]);
+
+    // staticAnimation
+    BSP_LCD_DrawRect_AtAddr(250, 180, msg.var3, 30, layer[0]);
+
 
 		osSemaphoreRelease(sLTDCHandle);
 	}
@@ -1168,6 +1214,105 @@ void task_staticAnimation(void *argument)
   /* USER CODE END task_staticAnimation */
 }
 
+void task_procesManager(void *argument)
+{
+  uint16_t array_size = 256;
+  uint16_t pidV_counter = 0;
+  uint16_t pidH_counter = 0;
+  uint16_t staticAnimation_counter = 0;
+  uint16_t pidSwitch_counter = 0;
+  
+  uint64_t pidV_times[array_size] = {0};
+  uint64_t pidH_times[array_size] = {0};
+  uint64_t staticAnimation_times[array_size] = {0};
+  uint64_t pidSwitch_times[array_size] = {0};
+
+  uint64_t pidV_first = 0;
+  uint64_t pidV_last = 0;
+
+  ManagerMessage msg; //wiadomosc ze zliczeniami dla kolejnych procesów
+  msg.type = TASK_MANAGER_COUNTS; 
+  uint64_t y, current_ticks;
+
+  while(true)
+  {
+    current_ticks = osKernelGetTickCount();
+    // handle pid controller V
+    if((osOK == osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_PROCESS_TIME)){ // wait for response, as long as it is required
+      y = m.value;
+    }
+    pidV_first = (pidV_first++) % array_size;
+
+    pidV_times[pidV_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+
+    //sprawdzic, czy pidV_last nie wskazuje na zbyt stare dane
+    while (current_ticks - pidV_times[pidV_last] > 1000)
+    {
+      pidV_last = (pidV_last + 1) % array_size;
+    }
+
+    // oblicz ile razy task byl wykonany
+    if (pidV_first >= pidV_last)
+    {
+      msg.val1 = pidV_first - pidV_last;
+    }
+    else
+    {
+      msg.val1 = pidV_first + array_size - pidV_last;
+    }
+
+    // handle pid controller H
+    if((osOK == osMessageQueueGet(qControllerHHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_PROCESS_TIME)){ // wait for response, as long as it is required
+      y = m.value;
+    }
+    pidH_first = (pidH_first++) % array_size;
+
+    pidH_times[pidH_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+
+    //sprawdzic, czy pidV_last nie wskazuje na zbyt stare dane
+    while (current_ticks - pidH_times[pidH_last] > 1000)
+    {
+      pidH_last = (pidH_last + 1) % array_size;
+    }
+
+    // oblicz ile razy task byl wykonany
+    if (pidH_first >= pidH_last)
+    {
+      msg.val2 = pidH_first - pidH_last;
+    }
+    else
+    {
+      msg.val2 = pidH_first + array_size - pidH_last;
+    }
+
+    // handle static animation
+    if((osOK == osMessageQueueGet(qStaticAnimationHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_PROCESS_TIME)){ // wait for response, as long as it is required
+      y = m.value;
+    }
+    pidA_first = (pidA_first++) % array_size;
+
+    pidA_times[pidA_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+
+    //sprawdzic, czy pidV_last nie wskazuje na zbyt stare dane
+    while (current_ticks - pidA_times[pidA_last] > 1000)
+    {
+      pidA_last = (pidA_last + 1) % array_size;
+    }
+
+    // oblicz ile razy task byl wykonany
+    if (pidA_first >= pidA_last)
+    {
+      msg.val3 = pidA_first - pidA_last;
+    }
+    else
+    {
+      msg.val3 = pidA_first + array_size - pidA_last;
+    }
+
+    osMessageQueuePut(qProcesManagerHandle, &msg, 1, 0); 
+  }
+}
+
 /* timer_process function */
 void timer_process(void *argument)
 {
@@ -1249,4 +1394,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
