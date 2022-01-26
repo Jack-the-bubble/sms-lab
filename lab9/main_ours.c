@@ -173,6 +173,29 @@ const osThreadAttr_t procesManager_attributes = {
   .stack_size = sizeof(procesManagerBuffer),
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for qstaticAnimation */
+osMessageQueueId_t qStaticAnimationHandle;
+uint8_t qStaticAnimationBuffer[ 16 * sizeof( uint64_t ) ];
+osStaticMessageQDef_t qStaticAnimationControlBlock;
+const osMessageQueueAttr_t qStaticAnimationControlBlock = {
+  .name = "qStaticAnimationHandle",
+  .cb_mem = &qStaticAnimationControlBlock,
+  .cb_size = sizeof(qStaticAnimationControlBlock),
+  .mq_mem = &qStaticAnimationBuffer,
+  .mq_size = sizeof(qStaticAnimationBuffer)
+};
+/* Definitions for qDraw */
+osMessageQueueId_t qDrawHandle;
+uint8_t qDrawBuffer[ 16 * sizeof( Message ) ];
+osStaticMessageQDef_t qDrawControlBlock;
+const osMessageQueueAttr_t qDrawControlBlock = {
+  .name = "qDrawHandle",
+  .cb_mem = &qDrawControlBlock,
+  .cb_size = sizeof(qDrawControlBlock),
+  .mq_mem = &qDrawBuffer,
+  .mq_size = sizeof(qDrawBuffer)
+};
+
 /* Definitions for qProcess */
 osMessageQueueId_t qProcessHandle;
 uint8_t qProcessBuffer[ 16 * sizeof( Message ) ];
@@ -267,8 +290,7 @@ float cy2 = 0.0f;
 float cz1 = -0.25f;
 float cz2 = 0.50f;
 
-uint16_t Xlist[4] = {150, 100, 200, 100};
-uint16_t Ylist[4] = {100, 50, 100, 150};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -390,10 +412,11 @@ int main(void)
   /* Create the timer(s) */
   /* creation of process */
   processHandle = osTimerNew(timer_process, osTimerPeriodic, NULL, &process_attributes);
-
+  //task_staticAnimation = osTimerNew(timer_process, osTimerPeriodic, NULL, &process_attributes);
   /* USER CODE BEGIN RTOS_TIMERS */
 	/* start timers, add new ones, ... */
   // LOOKATME Tutaj należy dodać konfigurację timerów (ich okres odpalenia)
+  //osTimerStart(task_staticAnimation, 10);
 	osTimerStart(processHandle, 10);
   /* USER CODE END RTOS_TIMERS */
 
@@ -411,6 +434,7 @@ int main(void)
   qControllerVHandle = osMessageQueueNew (16, sizeof(Message), &qControllerV_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
+    qStaticAnimationHandle = osThreadNew(16, sizeof(uint64_t), &qStaticAnimation_attributes);
 	/* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
@@ -983,9 +1007,12 @@ void task_ltdcDriver(void *argument)
   /* USER CODE BEGIN 5 */
 	/* Infinite loop */
   ManagerMessage msg;
+  uint16_t Xold[4] = {0, 0, 0, 0};
+  uint16_t Yold[4] = {0, 0, 0, 0};
+  uint16_t Xlist[4];
+  uint16_t Ylist[4];
 
 	for (;;) {
-
 
 		osEventFlagsWait(eLTDCReadyHandle, 0x00000001U, osFlagsWaitAny,
 		osWaitForever);
@@ -993,6 +1020,8 @@ void task_ltdcDriver(void *argument)
 
     // get data from proces manager
     osMessageQueueGet(qProcesManagerHandle, &msg, NULL, osWaitForever);
+    osMessageQueueGet(qDrawHandle, &Xlist, NULL, osWaitForever);
+    osMessageQueueGet(qDrawHandle, &Ylist, NULL, osWaitForever);
 
 		// clear all
 		BSP_LCD_SelectLayer(0);
@@ -1000,9 +1029,17 @@ void task_ltdcDriver(void *argument)
 		BSP_LCD_SelectLayer(1);
 		BSP_LCD_Clear_AtAddr(LCD_COLOR_TRANSPARENT, layer[1]);
 
+    BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+    BSP_LCD_DrawLine_AtAddr(Xold[0], Yold[0], Xold[1], Yold[1], layer[0]);
+    BSP_LCD_DrawLine_AtAddr(Xold[1], Yold[1], Xold[2], Yold[2], layer[0]);
+    BSP_LCD_DrawLine_AtAddr(Xold[2], Yold[2], Xold[3], Yold[3], layer[0]);
+    BSP_LCD_DrawLine_AtAddr(Xold[3], Yold[3], Xold[0], Yold[0], layer[0]);
+
+    BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
 		BSP_LCD_DrawLine_AtAddr(Xlist[0], Ylist[0], Xlist[1], Ylist[1], layer[0]);
 		BSP_LCD_DrawLine_AtAddr(Xlist[1], Ylist[1], Xlist[2], Ylist[2], layer[0]);
 		BSP_LCD_DrawLine_AtAddr(Xlist[2], Ylist[2], Xlist[3], Ylist[3], layer[0]);
+    BSP_LCD_DrawLine_AtAddr(Xlist[3], Ylist[3], Xlist[0], Ylist[0], layer[0]);
 
 		// draw on bottom layer
 		BSP_LCD_SelectLayer(0); // select colors and fonts for the bottom layer
@@ -1036,7 +1073,7 @@ void task_ltdcDriver(void *argument)
 		DrawPointOfTouch(&TS_State);
 
     // draw proces manager bars
-    
+
     // pid V
     BSP_LCD_DrawRect_AtAddr(250, 100, msg.var1, 30, layer[0]);
 
@@ -1179,6 +1216,9 @@ void task_staticAnimation(void *argument)
   /* USER CODE BEGIN task_staticAnimation */
 	/* Infinite loop */
 	// TODO Zaimplementować animację -- obracający się obiekt o stałej prędkości obrotowej bez wzlędu na wartość w osDelay(.)
+  uint16_t Xlist[4] = {150, 100, 200, 100};
+  uint16_t Ylist[4] = {100, 50, 100, 150};
+
 	uint16_t center_x = 200;
 	uint16_t center_y = 100;
 	float half_len = 50.0;
@@ -1193,23 +1233,22 @@ void task_staticAnimation(void *argument)
 		angle = diff % 5000;
 		angle = angle*2*M_PI/5000;
 
-		// lock
+		osMessageQueuePut(qStaticAnimationHandle, &current_tick, NULL, osWaitForever);
 //		pierwsza wspolrzedna
 		Xlist[0] = (uint16_t)(sin(angle)*half_len) + center_x;
+  	Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
+  	Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
+  	Ylist[1] = (uint16_t)(cos(angle+M_PI/2)*half_len) + center_y;
+		Xlist[2] = (uint16_t)(sin(angle+M_PI)*half_len) + center_x;
+		Ylist[2] = (uint16_t)(cos(angle+M_PI)*half_len) + center_y;
+		Xlist[3] = (uint16_t)(sin(angle+M_PI/2+M_PI)*half_len) + center_x;
+		Ylist[3] = (uint16_t)(cos(angle+M_PI/2+M_PI)*half_len) + center_y;
 
-//		Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
-//
-//		Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
-//		Ylist[1] = (uint16_t)(cos(angle+M_PI/2)*half_len) + center_y;
-//
-//		Xlist[2] = (uint16_t)(sin(angle+M_PI)*half_len) + center_x;
-//		Ylist[2] = (uint16_t)(cos(angle+M_PI)*half_len) + center_y;
-//
-//		Xlist[3] = (uint16_t)(sin(angle+M_PI/2+M_PI)*half_len) + center_x;
-//		Ylist[3] = (uint16_t)(cos(angle+M_PI/2+M_PI)*half_len) + center_y;
+    osMessageQueuePut(qDrawHandle, &Xlist, NULL, osWaitForever);
+    osMessageQueuePut(qDrawHandle, &Ylist, NULL, osWaitForever);
 
-		//unlock
 		osDelay(1);
+
 	}
   /* USER CODE END task_staticAnimation */
 }
@@ -1221,7 +1260,7 @@ void task_procesManager(void *argument)
   uint16_t pidH_counter = 0;
   uint16_t staticAnimation_counter = 0;
   uint16_t pidSwitch_counter = 0;
-  
+
   uint64_t pidV_times[array_size] = {0};
   uint64_t pidH_times[array_size] = {0};
   uint64_t staticAnimation_times[array_size] = {0};
@@ -1231,16 +1270,14 @@ void task_procesManager(void *argument)
   uint64_t pidV_last = 0;
 
   ManagerMessage msg; //wiadomosc ze zliczeniami dla kolejnych procesów
-  msg.type = TASK_MANAGER_COUNTS; 
+  msg.type = TASK_MANAGER_COUNTS;
   uint64_t y, current_ticks;
 
   while(true)
   {
     current_ticks = osKernelGetTickCount();
     // handle pid controller V
-    if((osOK == osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_PROCESS_TIME)){ // wait for response, as long as it is required
-      y = m.value;
-    }
+    osOK = osMessageQueueGet(qControllerVHandle, &y, NULL, osWaitForever);
     pidV_first = (pidV_first++) % array_size;
 
     pidV_times[pidV_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
@@ -1262,9 +1299,7 @@ void task_procesManager(void *argument)
     }
 
     // handle pid controller H
-    if((osOK == osMessageQueueGet(qControllerHHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_PROCESS_TIME)){ // wait for response, as long as it is required
-      y = m.value;
-    }
+    osOK = osMessageQueueGet(qControllerHHandle, &y, NULL, osWaitForever);
     pidH_first = (pidH_first++) % array_size;
 
     pidH_times[pidH_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
@@ -1286,9 +1321,7 @@ void task_procesManager(void *argument)
     }
 
     // handle static animation
-    if((osOK == osMessageQueueGet(qStaticAnimationHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_PROCESS_TIME)){ // wait for response, as long as it is required
-      y = m.value;
-    }
+    osOK = osMessageQueueGet(qStaticAnimationHandle, &y, NULL, osWaitForever);
     pidA_first = (pidA_first++) % array_size;
 
     pidA_times[pidA_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
@@ -1309,7 +1342,7 @@ void task_procesManager(void *argument)
       msg.val3 = pidA_first + array_size - pidA_last;
     }
 
-    osMessageQueuePut(qProcesManagerHandle, &msg, 1, 0); 
+    osMessageQueuePut(qProcesManagerHandle, &msg, 1, 0);
   }
 }
 
