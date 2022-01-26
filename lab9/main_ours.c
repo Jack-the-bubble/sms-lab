@@ -400,8 +400,8 @@ int main(void)
 	/* start timers, add new ones, ... */
   // LOOKATME Tutaj należy dodać konfigurację timerów (ich okres odpalenia)
 	osTimerStart(processHandle, 10);
-  osTimerStart(controllerVProcessHandle, 10);
-  osTimerStart(controllerHProcessHandle, 10);
+  osTimerStart(controllerVProcessHandle, 200);
+  osTimerStart(controllerHProcessHandle, 40);
 
   /* USER CODE END RTOS_TIMERS */
 
@@ -1230,19 +1230,19 @@ void task_staticAnimation(void *argument)
 		angle = angle*2*M_PI/5000;
 
 		// lock
-//		pierwsza wspolrzedna
+    // pierwsza wspolrzedna
 		Xlist[0] = (uint16_t)(sin(angle)*half_len) + center_x;
 
-//		Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
-//
-//		Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
-//		Ylist[1] = (uint16_t)(cos(angle+M_PI/2)*half_len) + center_y;
-//
-//		Xlist[2] = (uint16_t)(sin(angle+M_PI)*half_len) + center_x;
-//		Ylist[2] = (uint16_t)(cos(angle+M_PI)*half_len) + center_y;
-//
-//		Xlist[3] = (uint16_t)(sin(angle+M_PI/2+M_PI)*half_len) + center_x;
-//		Ylist[3] = (uint16_t)(cos(angle+M_PI/2+M_PI)*half_len) + center_y;
+		Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
+
+		Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
+		Ylist[1] = (uint16_t)(cos(angle+M_PI/2)*half_len) + center_y;
+
+		Xlist[2] = (uint16_t)(sin(angle+M_PI)*half_len) + center_x;
+		Ylist[2] = (uint16_t)(cos(angle+M_PI)*half_len) + center_y;
+
+		Xlist[3] = (uint16_t)(sin(angle+M_PI/2+M_PI)*half_len) + center_x;
+		Ylist[3] = (uint16_t)(cos(angle+M_PI/2+M_PI)*half_len) + center_y;
 
 		//unlock
 		osDelay(1);
