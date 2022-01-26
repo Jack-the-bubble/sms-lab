@@ -57,8 +57,9 @@ typedef StaticEventGroup_t osStaticEventGroupDef_t;
 #define TYPE_Y2 5
 #define TYPE_Z1 8
 #define TYPE_Z2 9
-#define TYPE_PROCESS_TIME 50
-#define TASK_MANAGER_COUNTS 51
+#define PROCES_MANAGER_ANIMATION 50
+#define PROCES_MANAGER_PID_V 51
+#define PROCES_MANAGER_PID_H 52
 typedef struct {
 	uint8_t type;
 	float value;
@@ -174,11 +175,11 @@ const osThreadAttr_t procesManager_attributes = {
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for qstaticAnimation */
-osMessageQueueId_t qStaticAnimationHandle;
-uint8_t qStaticAnimationBuffer[ 16 * sizeof( uint64_t ) ];
+osMessageQueueId_t qProcesManagerHandle;
+uint8_t qStaticAnimationBuffer[ 16 * sizeof( TickMessage ) ];
 osStaticMessageQDef_t qStaticAnimationControlBlock;
-const osMessageQueueAttr_t qStaticAnimationControlBlock = {
-  .name = "qStaticAnimationHandle",
+const osMessageQueueAttr_t qStaticAnimation_attributes = {
+  .name = "qProcesManagerHandle",
   .cb_mem = &qStaticAnimationControlBlock,
   .cb_size = sizeof(qStaticAnimationControlBlock),
   .mq_mem = &qStaticAnimationBuffer,
@@ -217,6 +218,17 @@ const osMessageQueueAttr_t qLTDCReady_attributes = {
   .cb_size = sizeof(qLTDCReadyControlBlock),
   .mq_mem = &qLTDCReadyBuffer,
   .mq_size = sizeof(qLTDCReadyBuffer)
+};
+/* Definition for qProcesLCDManager*/
+osMessageQueueId_t qProcesLCDManagerHandle;
+uint8_t qProcesLCDManagerBuffer[ 16 * sizeof( ManagerMessage ) ];
+osStaticMessageQDef_t qProcesLCDManagerControlBlock;
+const osMessageQueueAttr_t qProcesLCDManager_attributes = {
+  .name = "qLTDCReady",
+  .cb_mem = &qProcesLCDManagerControlBlock,
+  .cb_size = sizeof(qProcesLCDManagerControlBlock),
+  .mq_mem = &qProcesLCDManagerBuffer,
+  .mq_size = sizeof(qProcesLCDManagerBuffer)
 };
 /* Definitions for qTSState */
 osMessageQueueId_t qTSStateHandle;
@@ -434,7 +446,9 @@ int main(void)
   qControllerVHandle = osMessageQueueNew (16, sizeof(Message), &qControllerV_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
-    qStaticAnimationHandle = osThreadNew(16, sizeof(uint64_t), &qStaticAnimation_attributes);
+  qProcesManagerHandle = osThreadNew(16, sizeof(TickMessage), &qStaticAnimation_attributes);
+
+  qProcesLCDManagerHandle = osThreadNew(16, sizeof(ManagerMessage), &qProcesLCDManager_attributes);
 	/* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
@@ -1019,7 +1033,7 @@ void task_ltdcDriver(void *argument)
 		osSemaphoreAcquire(sLTDCHandle, osWaitForever);
 
     // get data from proces manager
-    osMessageQueueGet(qProcesManagerHandle, &msg, NULL, osWaitForever);
+    osMessageQueueGet(qProcesLCDManagerHandle, &msg, NULL, osWaitForever);
     osMessageQueueGet(qDrawHandle, &Xlist, NULL, osWaitForever);
     osMessageQueueGet(qDrawHandle, &Ylist, NULL, osWaitForever);
 
@@ -1226,14 +1240,17 @@ void task_staticAnimation(void *argument)
 	uint64_t first_tick = osKernelGetTickCount();
 	uint64_t current_tick;
 	uint64_t diff;
+  TickMessage msg = {0};
+  msg.type = PROCES_MANAGER_ANIMATION;
 	for (;;) {
 		current_tick = osKernelGetTickCount();
 		diff = current_tick - first_tick;
 
 		angle = diff % 5000;
 		angle = angle*2*M_PI/5000;
+    msg.value = current_tick;
 
-		osMessageQueuePut(qStaticAnimationHandle, &current_tick, NULL, osWaitForever);
+		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
 //		pierwsza wspolrzedna
 		Xlist[0] = (uint16_t)(sin(angle)*half_len) + center_x;
   	Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
@@ -1271,13 +1288,16 @@ void task_procesManager(void *argument)
 
   ManagerMessage msg; //wiadomosc ze zliczeniami dla kolejnych procesów
   msg.type = TASK_MANAGER_COUNTS;
+  TickMessage tick_msg;
   uint64_t y, current_ticks;
 
   while(true)
   {
     current_ticks = osKernelGetTickCount();
     // handle pid controller V
-    osOK = osMessageQueueGet(qControllerVHandle, &y, NULL, osWaitForever);
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_ANIMATION)){ // wait for response, as long as it is required
+		  y = m.value;
+	  }
     pidV_first = (pidV_first++) % array_size;
 
     pidV_times[pidV_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
@@ -1299,7 +1319,9 @@ void task_procesManager(void *argument)
     }
 
     // handle pid controller H
-    osOK = osMessageQueueGet(qControllerHHandle, &y, NULL, osWaitForever);
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_PID_H)){ // wait for response, as long as it is required
+		  y = m.value;
+	  }
     pidH_first = (pidH_first++) % array_size;
 
     pidH_times[pidH_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
@@ -1321,7 +1343,9 @@ void task_procesManager(void *argument)
     }
 
     // handle static animation
-    osOK = osMessageQueueGet(qStaticAnimationHandle, &y, NULL, osWaitForever);
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_PID_V)){ // wait for response, as long as it is required
+		  y = m.value;
+	  }
     pidA_first = (pidA_first++) % array_size;
 
     pidA_times[pidA_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
@@ -1342,7 +1366,7 @@ void task_procesManager(void *argument)
       msg.val3 = pidA_first + array_size - pidA_last;
     }
 
-    osMessageQueuePut(qProcesManagerHandle, &msg, 1, 0);
+    osMessageQueuePut(qProcesLCDManagerHandle, &msg, 1, 0);
   }
 }
 
