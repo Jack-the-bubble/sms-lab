@@ -150,6 +150,19 @@ const osThreadAttr_t controllerV_attributes = {
   .stack_size = sizeof(controllerVBuffer),
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for controllerH */
+osThreadId_t controllerHHandle;
+uint32_t controllerHBuffer[ 512 ];
+osStaticThreadDef_t controllerHControlBlock;
+const osThreadAttr_t controllerH_attributes = {
+  .name = "controllerH",g
+  .cb_mem = &controllerHControlBlock,
+  .cb_size = sizeof(controllerHControlBlock),
+  .stack_mem = &controllerHBuffer[0],
+  .stack_size = sizeof(controllerHBuffer),
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
 /* Definitions for staticAnimation */
 osThreadId_t staticAnimationHandle;
 uint32_t staticAnimationBuffer[ 512 ];
@@ -252,8 +265,24 @@ const osMessageQueueAttr_t qControllerV_attributes = {
   .mq_mem = &qControllerVBuffer,
   .mq_size = sizeof(qControllerVBuffer)
 };
+
+/* Definitions for qControllerH */
+osMessageQueueId_t qControllerHHandle;
+uint8_t qControllerHBuffer[ 16 * sizeof( Message ) ];
+osStaticMessageQDef_t qControllerHControlBlock;
+const osMessageQueueAttr_t qControllerH_attributes = {
+  .name = "qControllerH",
+  .cb_mem = &qControllerHControlBlock,
+  .cb_size = sizeof(qControllerHControlBlock),
+  .mq_mem = &qControllerHBuffer,
+  .mq_size = sizeof(qControllerHBuffer)
+};
+
 /* Definitions for process */
 osTimerId_t processHandle;
+osTimerId_t controllerVProcessHandle;
+osTimerId_t controllerHProcessHandle;
+
 osStaticTimerDef_t processControlBlock;
 const osTimerAttr_t process_attributes = {
   .name = "process",
@@ -319,6 +348,7 @@ void task_ltdcDriver(void *argument);
 void task_processDriver(void *argument);
 void task_tsDriver(void *argument);
 void task_controllerV(void *argument);
+void task_controllerH(void *argument);
 void task_staticAnimation(void *argument);
 void task_procesManager(void *argument);
 void timer_process(void *argument);
@@ -424,12 +454,17 @@ int main(void)
   /* Create the timer(s) */
   /* creation of process */
   processHandle = osTimerNew(timer_process, osTimerPeriodic, NULL, &process_attributes);
-  //task_staticAnimation = osTimerNew(timer_process, osTimerPeriodic, NULL, &process_attributes);
+  controllerVProcessHandle = osTimerNew(task_controllerV, osTimerPeriodic, NULL, &process_attributes);
+  controllerHProcessHandle = osTimerNew(task_controllerH, osTimerPeriodic, NULL, &process_attributes);
+
   /* USER CODE BEGIN RTOS_TIMERS */
 	/* start timers, add new ones, ... */
   // LOOKATME Tutaj należy dodać konfigurację timerów (ich okres odpalenia)
   //osTimerStart(task_staticAnimation, 10);
 	osTimerStart(processHandle, 10);
+  osTimerStart(controllerVProcessHandle, 200);
+  osTimerStart(controllerHProcessHandle, 40);
+
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
@@ -444,6 +479,9 @@ int main(void)
 
   /* creation of qControllerV */
   qControllerVHandle = osMessageQueueNew (16, sizeof(Message), &qControllerV_attributes);
+
+  /* creation of qControllerH */
+  qControllerHHandle = osMessageQueueNew (16, sizeof(Message), &qControllerH_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   qProcesManagerHandle = osThreadNew(16, sizeof(TickMessage), &qStaticAnimation_attributes);
@@ -464,6 +502,9 @@ int main(void)
 
   /* creation of controllerV */
   controllerVHandle = osThreadNew(task_controllerV, NULL, &controllerV_attributes);
+
+  /* creation of controllerV */
+  controllerHHandle = osThreadNew(task_controllerH, NULL, &controllerH_attributes);
 
   /* creation of staticAnimation */
   staticAnimationHandle = osThreadNew(task_staticAnimation, NULL, &staticAnimation_attributes);
@@ -1213,7 +1254,48 @@ void task_controllerV(void *argument)
 	  osMessageQueuePut(qProcessHandle, &m, 1, 0);
 
 	  e1 = e0;
-	  osDelay(200); // Tp = 200ms #DUMB
+  }
+  /* USER CODE END task_controllerV */
+}
+
+void task_controllerH(void *argument)
+{
+  Message m = {0};
+  float y  = 0.0f;
+  float e1 = 0.0f;
+  float e0 = 0.0f;
+  float u  = 0.0f;
+  float up = 0.0f;
+  float ui = 0.0f;
+  float ud = 0.0f;
+
+  float K  = 4.0f; // przyzwoite parametry regulacji dla Tp = 0.2
+  float Ti = 4.0f; // przyzwoite parametry regulacji dla Tp = 0.2
+  float Td = 0.3f; // przyzwoite parametry regulacji dla Tp = 0.2
+  float Tp = 0.2f;
+  /* Infinite loop */
+  for(;;)
+  {
+	  m.type = TYPE_Y2;
+	  osMessageQueuePut(qProcessHandle, &m, 1, 0); // send request for Y1
+	  if((osOK == osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_Y2)){ // wait for response, as long as it is required
+		  y = m.value;
+	  }
+	  e0 = cz2-y;
+	  up = K*e0;
+	  ui = ui+K/Ti*Tp*(e1+e0)/2.0f;
+	  ud = K*Td*(e0-e1)/Tp;
+	  u = up+ui+ud;
+	  if(u > 1.0f)
+	  	u = 1.0f;
+	  if(u < -1.0f)
+	  	u = -1.0f;
+
+	  m.type = TYPE_U2;
+	  m.value = u;
+	  osMessageQueuePut(qProcessHandle, &m, 1, 0);
+
+	  e1 = e0;
   }
   /* USER CODE END task_controllerV */
 }
@@ -1251,7 +1333,6 @@ void task_staticAnimation(void *argument)
     msg.value = current_tick;
 
 		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
-//		pierwsza wspolrzedna
 		Xlist[0] = (uint16_t)(sin(angle)*half_len) + center_x;
   	Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
   	Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
@@ -1263,6 +1344,17 @@ void task_staticAnimation(void *argument)
 
     osMessageQueuePut(qDrawHandle, &Xlist, NULL, osWaitForever);
     osMessageQueuePut(qDrawHandle, &Ylist, NULL, osWaitForever);
+
+		Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
+
+		Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
+		Ylist[1] = (uint16_t)(cos(angle+M_PI/2)*half_len) + center_y;
+
+		Xlist[2] = (uint16_t)(sin(angle+M_PI)*half_len) + center_x;
+		Ylist[2] = (uint16_t)(cos(angle+M_PI)*half_len) + center_y;
+
+		Xlist[3] = (uint16_t)(sin(angle+M_PI/2+M_PI)*half_len) + center_x;
+		Ylist[3] = (uint16_t)(cos(angle+M_PI/2+M_PI)*half_len) + center_y;
 
 		osDelay(1);
 
