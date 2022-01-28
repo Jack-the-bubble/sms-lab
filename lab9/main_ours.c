@@ -58,7 +58,6 @@ typedef StaticEventGroup_t osStaticEventGroupDef_t;
 #define TYPE_Y2 5
 #define TYPE_Z1 8
 #define TYPE_Z2 9
-
 volatile bool params_switch = 0;
 
 struct ControllerParams {
@@ -69,10 +68,25 @@ struct ControllerParams {
 
 ControllerParams controller_params;
 
+#define PROCES_MANAGER_ANIMATION 50
+#define PROCES_MANAGER_PID_V 51
+#define PROCES_MANAGER_PID_H 52
 typedef struct {
   uint8_t type;
   float value;
 } Message;
+
+typedef struct {
+  uint8_t type;
+  uint64_t ticks;
+} TickMessage;
+
+typedef struct {
+  uint8_t type;
+  uint16_t val1; //count for pid V
+  uint16_t val2; // count for pid H
+  uint16_t val3; // count for staticAnimation
+} ManagerMessage;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -189,6 +203,40 @@ const osThreadAttr_t cpc_attributes = {
     .stack_size = sizeof(cpc_buffer),
     .priority = (osPriority_t)osPriorityLow,
 };
+/* Definitions for procesManager */
+osThredId_t procesManagerHandle;
+uint32_t procesManagerBuffer[ 1500 ];
+osStaticThreadDef_t procesManagerControlBlock;
+const osThreadAttr_t procesManager_attributes = {
+  .name = "procesManager",
+  .cb_mem = &procesManagerControlBlock,
+  .cb_size = sizeof(procesManagerControlBlock),
+  .stack_mem = &procesManagerBuffer[0],
+  .stack_size = sizeof(procesManagerBuffer),
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for qstaticAnimation */
+osMessageQueueId_t qProcesManagerHandle;
+uint8_t qStaticAnimationBuffer[ 16 * sizeof( TickMessage ) ];
+osStaticMessageQDef_t qStaticAnimationControlBlock;
+const osMessageQueueAttr_t qStaticAnimation_attributes = {
+  .name = "qProcesManagerHandle",
+  .cb_mem = &qStaticAnimationControlBlock,
+  .cb_size = sizeof(qStaticAnimationControlBlock),
+  .mq_mem = &qStaticAnimationBuffer,
+  .mq_size = sizeof(qStaticAnimationBuffer)
+};
+/* Definitions for qDraw */
+osMessageQueueId_t qDrawHandle;
+uint8_t qDrawBuffer[ 16 * sizeof( Message ) ];
+osStaticMessageQDef_t qDrawControlBlock;
+const osMessageQueueAttr_t qDrawControlBlock = {
+  .name = "qDrawHandle",
+  .cb_mem = &qDrawControlBlock,
+  .cb_size = sizeof(qDrawControlBlock),
+  .mq_mem = &qDrawBuffer,
+  .mq_size = sizeof(qDrawBuffer)
+};
 
 /* Definitions for qProcess */
 osMessageQueueId_t qProcessHandle;
@@ -206,12 +254,23 @@ osMessageQueueId_t qLTDCReadyHandle;
 uint8_t qLTDCReadyBuffer[1 * sizeof(uint16_t)];
 osStaticMessageQDef_t qLTDCReadyControlBlock;
 const osMessageQueueAttr_t qLTDCReady_attributes = {
-    .name = "qLTDCReady",
-    .cb_mem = &qLTDCReadyControlBlock,
-    .cb_size = sizeof(qLTDCReadyControlBlock),
-    .mq_mem = &qLTDCReadyBuffer,
-    .mq_size = sizeof(qLTDCReadyBuffer)};
-
+  .name = "qLTDCReady",
+  .cb_mem = &qLTDCReadyControlBlock,
+  .cb_size = sizeof(qLTDCReadyControlBlock),
+  .mq_mem = &qLTDCReadyBuffer,
+  .mq_size = sizeof(qLTDCReadyBuffer)
+};
+/* Definition for qProcesLCDManager*/
+osMessageQueueId_t qProcesLCDManagerHandle;
+uint8_t qProcesLCDManagerBuffer[ 16 * sizeof( ManagerMessage ) ];
+osStaticMessageQDef_t qProcesLCDManagerControlBlock;
+const osMessageQueueAttr_t qProcesLCDManager_attributes = {
+  .name = "qLTDCReady",
+  .cb_mem = &qProcesLCDManagerControlBlock,
+  .cb_size = sizeof(qProcesLCDManagerControlBlock),
+  .mq_mem = &qProcesLCDManagerBuffer,
+  .mq_size = sizeof(qProcesLCDManagerBuffer)
+};
 /* Definitions for qTSState */
 osMessageQueueId_t qTSStateHandle;
 uint8_t qTSStateBuffer[16 * sizeof(TS_StateTypeDef)];
@@ -323,8 +382,7 @@ float cy2 = 0.0f;
 float cz1 = -0.25f;
 float cz2 = 0.50f;
 
-uint16_t Xlist[4] = {150, 100, 200, 100};
-uint16_t Ylist[4] = {100, 50, 100, 150};
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -344,6 +402,7 @@ void task_controllerV(void *argument);
 void task_controllerH(void *argument);
 void task_staticAnimation(void *argument);
 void taskControllerParametersChange(void *argument);
+void task_procesManager(void *argument);
 void timer_process(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -488,9 +547,9 @@ int main(void) {
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
   // LOOKATME Tutaj należy dodać konfigurację timerów (ich okres odpalenia)
-  osTimerStart(processHandle, 10);
-  osTimerStart(qcontrollerVProcessHandle, 200);
-  osTimerStart(qcontrollerHProcessHandle, 40);
+	osTimerStart(processHandle, 10);
+  osTimerStart(controllerVProcessHandle, 200);
+  osTimerStart(controllerHProcessHandle, 40);
 
   /* USER CODE END RTOS_TIMERS */
 
@@ -515,7 +574,10 @@ int main(void) {
       osMessageQueueNew(16, sizeof(Message), &qControllerH_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+  qProcesManagerHandle = osThreadNew(16, sizeof(TickMessage), &qStaticAnimation_attributes);
+
+  qProcesLCDManagerHandle = osThreadNew(16, sizeof(ManagerMessage), &qProcesLCDManager_attributes);
+	/* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -545,7 +607,9 @@ int main(void) {
       osThreadNew(taskControllerParametersChange, NULL, &cpc_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  /* creation of procesManager */
+  procesManagerHandle = osThreadNew(task_procesManager, NULL, &procesManager_attributes);
+	/* add threads, ... */
   /* USER CODE END RTOS_THREADS */
 
   /* creation of eLTDCReady */
@@ -1058,55 +1122,82 @@ void DrawPointOfTouch(TS_StateTypeDef *TSS) {
 /* USER CODE END Header_task_ltdcDriver */
 void task_ltdcDriver(void *argument) {
   /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for (;;) {
-    osEventFlagsWait(eLTDCReadyHandle, 0x00000001U, osFlagsWaitAny,
-                     osWaitForever);
-    osSemaphoreAcquire(sLTDCHandle, osWaitForever);
+	/* Infinite loop */
+  ManagerMessage msg;
+  uint16_t Xold[4] = {0, 0, 0, 0};
+  uint16_t Yold[4] = {0, 0, 0, 0};
+  uint16_t Xlist[4];
+  uint16_t Ylist[4];
 
-    // clear all
-    BSP_LCD_SelectLayer(0);
-    BSP_LCD_Clear_AtAddr(LCD_COLOR_WHITE, layer[0]);
-    BSP_LCD_SelectLayer(1);
-    BSP_LCD_Clear_AtAddr(LCD_COLOR_TRANSPARENT, layer[1]);
+	for (;;) {
 
-    BSP_LCD_DrawLine_AtAddr(Xlist[0], Ylist[0], Xlist[1], Ylist[1], layer[0]);
-    BSP_LCD_DrawLine_AtAddr(Xlist[1], Ylist[1], Xlist[2], Ylist[2], layer[0]);
-    BSP_LCD_DrawLine_AtAddr(Xlist[2], Ylist[2], Xlist[3], Ylist[3], layer[0]);
+		osEventFlagsWait(eLTDCReadyHandle, 0x00000001U, osFlagsWaitAny,
+		osWaitForever);
+		osSemaphoreAcquire(sLTDCHandle, osWaitForever);
 
-    // draw on bottom layer
-    BSP_LCD_SelectLayer(0);  // select colors and fonts for the bottom layer
+    // get data from proces manager
+    osMessageQueueGet(qProcesLCDManagerHandle, &msg, NULL, osWaitForever);
+    osMessageQueueGet(qDrawHandle, &Xlist, NULL, osWaitForever);
+    osMessageQueueGet(qDrawHandle, &Ylist, NULL, osWaitForever);
+
+		// clear all
+		BSP_LCD_SelectLayer(0);
+		BSP_LCD_Clear_AtAddr(LCD_COLOR_WHITE, layer[0]);
+		BSP_LCD_SelectLayer(1);
+		BSP_LCD_Clear_AtAddr(LCD_COLOR_TRANSPARENT, layer[1]);
+
+    BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+    BSP_LCD_DrawLine_AtAddr(Xold[0], Yold[0], Xold[1], Yold[1], layer[0]);
+    BSP_LCD_DrawLine_AtAddr(Xold[1], Yold[1], Xold[2], Yold[2], layer[0]);
+    BSP_LCD_DrawLine_AtAddr(Xold[2], Yold[2], Xold[3], Yold[3], layer[0]);
+    BSP_LCD_DrawLine_AtAddr(Xold[3], Yold[3], Xold[0], Yold[0], layer[0]);
+
     BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-    BSP_LCD_DrawRect_AtAddr(10 - 5, 10 - 5, 200 + 5 + 5, 200 + 5 + 5,
-                            layer[0]);  // +5 for each margin, so that the
-                                        // "ball" doesn't stick out of the frame
-    BSP_LCD_SetTextColor(LCD_COLOR_RED);
-    BSP_LCD_FillCircle_AtAddr(cz1 * 100 + 110, cz2 * 100 + 110, 4, layer[0]);
-    BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-    BSP_LCD_DrawCircle_AtAddr(cy1 * 100 + 110, cy2 * 100 + 110, 5, layer[0]);
-
-    // some text lines for debugging purposes
-    BSP_LCD_SetFont(&Font12);
-    BSP_LCD_DisplayStringAt_AtAddr(10, 225, (uint8_t *)LCD_Text0, LEFT_MODE,
-                                   layer[0]);
-    BSP_LCD_DisplayStringAt_AtAddr(10, 240, (uint8_t *)LCD_Text1, LEFT_MODE,
-                                   layer[0]);
-    BSP_LCD_DisplayStringAt_AtAddr(10, 255, (uint8_t *)LCD_Text2, LEFT_MODE,
-                                   layer[0]);
-    // TODO Rozwinąć funkcjonalność o rysowanie nowych elementów
-
-    //		BSP_LCD_DrawRect_AtAddr(150, 100, 20, 30, layer[0]);
-    //		BSP_LCD_DrawPolygon_AtAddr(list, 4, layer[0]);
-
+		BSP_LCD_DrawLine_AtAddr(Xlist[0], Ylist[0], Xlist[1], Ylist[1], layer[0]);
+		BSP_LCD_DrawLine_AtAddr(Xlist[1], Ylist[1], Xlist[2], Ylist[2], layer[0]);
+		BSP_LCD_DrawLine_AtAddr(Xlist[2], Ylist[2], Xlist[3], Ylist[3], layer[0]);
     BSP_LCD_DrawLine_AtAddr(Xlist[3], Ylist[3], Xlist[0], Ylist[0], layer[0]);
 
-    // draw on top layer
-    BSP_LCD_SelectLayer(1);  // select colors and fonts for the top layer
-    BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-    DrawPointOfTouch(&TS_State);
+		// draw on bottom layer
+		BSP_LCD_SelectLayer(0); // select colors and fonts for the bottom layer
+		BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+		BSP_LCD_DrawRect_AtAddr(10-5, 10-5, 200+5+5, 200+5+5, layer[0]); // +5 for each margin, so that the "ball" doesn't stick out of the frame
+		BSP_LCD_SetTextColor(LCD_COLOR_RED);
+		BSP_LCD_FillCircle_AtAddr(cz1 * 100 + 110, cz2 * 100 + 110, 4, layer[0]);
+		BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+		BSP_LCD_DrawCircle_AtAddr(cy1 * 100 + 110, cy2 * 100 + 110, 5, layer[0]);
 
-    osSemaphoreRelease(sLTDCHandle);
-  }
+
+
+		// some text lines for debugging purposes
+		BSP_LCD_SetFont(&Font12);
+		BSP_LCD_DisplayStringAt_AtAddr(10, 225, (uint8_t*) LCD_Text0, LEFT_MODE,
+				layer[0]);
+		BSP_LCD_DisplayStringAt_AtAddr(10, 240, (uint8_t*) LCD_Text1, LEFT_MODE,
+				layer[0]);
+		BSP_LCD_DisplayStringAt_AtAddr(10, 255, (uint8_t*) LCD_Text2, LEFT_MODE,
+				layer[0]);
+		// TODO Rozwinąć funkcjonalność o rysowanie nowych elementów
+
+		// draw on top layer
+		BSP_LCD_SelectLayer(1); // select colors and fonts for the top layer
+		BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+		DrawPointOfTouch(&TS_State);
+
+    // draw proces manager bars
+
+    // pid V
+    BSP_LCD_DrawRect_AtAddr(250, 100, msg.var1, 30, layer[0]);
+
+    // pid H
+    BSP_LCD_DrawRect_AtAddr(250, 140, msg.var2, 30, layer[0]);
+
+    // staticAnimation
+    BSP_LCD_DrawRect_AtAddr(250, 180, msg.var3, 30, layer[0]);
+
+
+		osSemaphoreRelease(sLTDCHandle);
+	}
   /* USER CODE END 5 */
 }
 
@@ -1277,42 +1368,148 @@ void task_controllerH(void *argument) {
 /* USER CODE END Header_task_staticAnimation */
 void task_staticAnimation(void *argument) {
   /* USER CODE BEGIN task_staticAnimation */
-  /* Infinite loop */
-  // TODO Zaimplementować animację -- obracający się obiekt o stałej prędkości
-  // obrotowej bez wzlędu na wartość w osDelay(.)
-  uint16_t center_x = 200;
-  uint16_t center_y = 100;
-  float half_len = 50.0;
-  float angle;
-  uint64_t first_tick = osKernelGetTickCount();
-  uint64_t current_tick;
-  uint64_t diff;
-  for (;;) {
-    current_tick = osKernelGetTickCount();
-    diff = current_tick - first_tick;
+	/* Infinite loop */
+	// TODO Zaimplementować animację -- obracający się obiekt o stałej prędkości obrotowej bez wzlędu na wartość w osDelay(.)
+  uint16_t Xlist[4] = {150, 100, 200, 100};
+  uint16_t Ylist[4] = {100, 50, 100, 150};
 
-    angle = diff % 5000;
-    angle = angle * 2 * M_PI / 5000;
+	uint16_t center_x = 200;
+	uint16_t center_y = 100;
+	float half_len = 50.0;
+	float angle;
+	uint64_t first_tick = osKernelGetTickCount();
+	uint64_t current_tick;
+	uint64_t diff;
+  TickMessage msg = {0};
+  msg.type = PROCES_MANAGER_ANIMATION;
+	for (;;) {
+		current_tick = osKernelGetTickCount();
+		diff = current_tick - first_tick;
 
-    // lock
-    // pierwsza wspolrzedna
-    Xlist[0] = (uint16_t)(sin(angle) * half_len) + center_x;
+		angle = diff % 5000;
+		angle = angle*2*M_PI/5000;
+    msg.value = current_tick;
 
-    Ylist[0] = (uint16_t)(cos(angle) * half_len) + center_y;
+		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
+		Xlist[0] = (uint16_t)(sin(angle)*half_len) + center_x;
+  	Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
+  	Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
+  	Ylist[1] = (uint16_t)(cos(angle+M_PI/2)*half_len) + center_y;
+		Xlist[2] = (uint16_t)(sin(angle+M_PI)*half_len) + center_x;
+		Ylist[2] = (uint16_t)(cos(angle+M_PI)*half_len) + center_y;
+		Xlist[3] = (uint16_t)(sin(angle+M_PI/2+M_PI)*half_len) + center_x;
+		Ylist[3] = (uint16_t)(cos(angle+M_PI/2+M_PI)*half_len) + center_y;
 
-    Xlist[1] = (uint16_t)(sin(angle + M_PI / 2) * half_len) + center_x;
-    Ylist[1] = (uint16_t)(cos(angle + M_PI / 2) * half_len) + center_y;
+    osMessageQueuePut(qDrawHandle, &Xlist, NULL, osWaitForever);
+    osMessageQueuePut(qDrawHandle, &Ylist, NULL, osWaitForever);
 
-    Xlist[2] = (uint16_t)(sin(angle + M_PI) * half_len) + center_x;
-    Ylist[2] = (uint16_t)(cos(angle + M_PI) * half_len) + center_y;
+		osDelay(1);
 
-    Xlist[3] = (uint16_t)(sin(angle + M_PI / 2 + M_PI) * half_len) + center_x;
-    Ylist[3] = (uint16_t)(cos(angle + M_PI / 2 + M_PI) * half_len) + center_y;
-
-    // unlock
-    osDelay(1);
-  }
+	}
   /* USER CODE END task_staticAnimation */
+}
+
+void task_procesManager(void *argument)
+{
+  uint16_t array_size = 256;
+  uint16_t pidV_counter = 0;
+  uint16_t pidH_counter = 0;
+  uint16_t staticAnimation_counter = 0;
+  uint16_t pidSwitch_counter = 0;
+
+  uint64_t pidV_times[array_size] = {0};
+  uint64_t pidH_times[array_size] = {0};
+  uint64_t staticAnimation_times[array_size] = {0};
+
+  uint64_t pidV_first = 0;
+  uint64_t pidV_last = 0;
+  uint64_t pidH_first = 0;
+  uint64_t pidH_last = 0;
+  uint64_t animation_first = 0;
+  uint64_t animation_last = 0;
+
+  ManagerMessage msg; //wiadomosc ze zliczeniami dla kolejnych procesów
+  msg.type = TASK_MANAGER_COUNTS;
+  TickMessage tick_msg;
+  uint64_t y, current_ticks;
+
+  while(true)
+  {
+    current_ticks = osKernelGetTickCount();
+    // handle pid controller V
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_ANIMATION)){ // wait for response, as long as it is required
+		  y = m.value;
+	  }
+    pidV_first = (pidV_first++) % array_size;
+
+    pidV_times[pidV_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+
+    //sprawdzic, czy pidV_last nie wskazuje na zbyt stare dane
+    while (current_ticks - pidV_times[pidV_last] > 1000)
+    {
+      pidV_last = (pidV_last + 1) % array_size;
+    }
+
+    // oblicz ile razy task byl wykonany
+    if (pidV_first >= pidV_last)
+    {
+      msg.val1 = pidV_first - pidV_last;
+    }
+    else
+    {
+      msg.val1 = pidV_first + array_size - pidV_last;
+    }
+
+    // handle pid controller H
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_PID_H)){ // wait for response, as long as it is required
+		  y = m.value;
+	  }
+    pidH_first = (pidH_first++) % array_size;
+
+    pidH_times[pidH_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+
+    //sprawdzic, czy pidH_last nie wskazuje na zbyt stare dane
+    while (current_ticks - pidH_times[pidH_last] > 1000)
+    {
+      pidH_last = (pidH_last + 1) % array_size;
+    }
+
+    // oblicz ile razy task byl wykonany
+    if (pidH_first >= pidH_last)
+    {
+      msg.val2 = pidH_first - pidH_last;
+    }
+    else
+    {
+      msg.val2 = pidH_first + array_size - pidH_last;
+    }
+
+    // handle static animation
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_PID_V)){ // wait for response, as long as it is required
+		  y = m.value;
+	  }
+    animation_first = (animation_first++) % array_size;
+
+    staticAnimation_times[animation_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+
+    //sprawdzic, czy pidA_last nie wskazuje na zbyt stare dane
+    while (current_ticks - staticAnimation_times[animation_last] > 1000)
+    {
+      animation_last = (animation_last + 1) % array_size;
+    }
+
+    // oblicz ile razy task byl wykonany
+    if (animation_first >= animation_last)
+    {
+      msg.val3 = animation_first - animation_last;
+    }
+    else
+    {
+      msg.val3 = animation_first + array_size - animation_last;
+    }
+
+    osMessageQueuePut(qProcesLCDManagerHandle, &msg, 1, 0);
+  }
 }
 
 /* timer_process function */
