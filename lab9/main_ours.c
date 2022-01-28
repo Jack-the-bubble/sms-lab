@@ -1448,7 +1448,8 @@ void task_procesManager(void *argument)
   {
     current_ticks = osKernelGetTickCount();
     // handle pid controller V
-    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_ANIMATION)){ // wait for response, as long as it is required
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, 10))
+        && (tick_msg.type == PROCES_MANAGER_ANIMATION)){
 		  y = m.value;
 	  }
     pidV_first = (pidV_first++) % array_size;
@@ -1472,7 +1473,8 @@ void task_procesManager(void *argument)
     }
 
     // handle pid controller H
-    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_PID_H)){ // wait for response, as long as it is required
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, 10))
+        && (tick_msg.type == PROCES_MANAGER_PID_H)){
 		  y = m.value;
 	  }
     pidH_first = (pidH_first++) % array_size;
@@ -1496,12 +1498,14 @@ void task_procesManager(void *argument)
     }
 
     // handle static animation
-    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_PID_V)){ // wait for response, as long as it is required
+    if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, 10))
+        && (tick_msg.type == PROCES_MANAGER_PID_V)){
 		  y = m.value;
 	  }
     animation_first = (animation_first++) % array_size;
 
-    staticAnimation_times[animation_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+    //oblicz indeks nowej wartosci i tam zapisz
+    staticAnimation_times[animation_first] = y;  
 
     //sprawdzic, czy pidA_last nie wskazuje na zbyt stare dane
     while (current_ticks - staticAnimation_times[animation_last] > 1000)
