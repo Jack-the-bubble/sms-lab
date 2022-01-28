@@ -398,8 +398,8 @@ static void MX_USART1_UART_Init(void);
 void task_ltdcDriver(void *argument);
 void task_processDriver(void *argument);
 void task_tsDriver(void *argument);
-void task_controllerV(void *argument);
-void task_controllerH(void *argument);
+void timer_controllerV(void *argument);
+void timer_controllerH(void *argument);
 void task_staticAnimation(void *argument);
 void taskControllerParametersChange(void *argument);
 void task_procesManager(void *argument);
@@ -408,8 +408,8 @@ void timer_process(void *argument);
 /* USER CODE BEGIN PFP */
 
 void changeRegulatorParams(void) {
+  params_switch = !params_switch;
   if (params_switch) {
-    params_switch = !params_switch;
     controller_params.Kp = 14;
     controller_params.Ki = 13;
     controller_params.Kd = 12;
@@ -1274,7 +1274,7 @@ void task_tsDriver(void *argument) {
  * @retval None
  */
 /* USER CODE END Header_task_controllerV */
-void task_controllerV(void *argument) {
+void timer_controllerV(void *argument) {
   /* USER CODE BEGIN task_controllerV */
   // FIXME osDelay nie nadaje się do implementacji stałych okresów próbkowania
   // TODO Dodać możliwość zmiany parametrów z wykorzystaniem kolejki
@@ -1292,6 +1292,8 @@ void task_controllerV(void *argument) {
   // float Ti = 4.0f;  // przyzwoite parametry regulacji dla Tp = 0.2
   // float Td = 0.3f;  // przyzwoite parametry regulacji dla Tp = 0.2
   float Tp = 0.2f;
+  TickMessage msg;
+  msg.type = PROCES_MANAGER_PID_V;
   /* Infinite loop */
   for (;;) {
     m.type = TYPE_Y2;
@@ -1315,11 +1317,14 @@ void task_controllerV(void *argument) {
     osMessageQueuePut(qProcessHandle, &m, 1, 0);
 
     e1 = e0;
+
+    msg.value = osKernelGetTickCount();
+		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
   }
   /* USER CODE END task_controllerV */
 }
 
-void task_controllerH(void *argument) {
+void timer_controllerH(void *argument) {
   Message m = {0};
   float y = 0.0f;
   float e1 = 0.0f;
@@ -1333,6 +1338,9 @@ void task_controllerH(void *argument) {
   float Ti = 4.0f;  // przyzwoite parametry regulacji dla Tp = 0.2
   float Td = 0.3f;  // przyzwoite parametry regulacji dla Tp = 0.2
   float Tp = 0.2f;
+
+  TickMessage msg;
+  msg.type = PROCES_MANAGER_PID_H;
   /* Infinite loop */
   for (;;) {
     m.type = TYPE_Y2;
@@ -1355,6 +1363,9 @@ void task_controllerH(void *argument) {
     osMessageQueuePut(qProcessHandle, &m, 1, 0);
 
     e1 = e0;
+
+    msg.value = osKernelGetTickCount();
+		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
   }
   /* USER CODE END task_controllerV */
 }
@@ -1388,9 +1399,6 @@ void task_staticAnimation(void *argument) {
 
 		angle = diff % 5000;
 		angle = angle*2*M_PI/5000;
-    msg.value = current_tick;
-
-		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
 		Xlist[0] = (uint16_t)(sin(angle)*half_len) + center_x;
   	Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
   	Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
@@ -1403,7 +1411,10 @@ void task_staticAnimation(void *argument) {
     osMessageQueuePut(qDrawHandle, &Xlist, NULL, osWaitForever);
     osMessageQueuePut(qDrawHandle, &Ylist, NULL, osWaitForever);
 
-		osDelay(1);
+    msg.value = current_tick;
+		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
+		
+    osDelay(1);
 
 	}
   /* USER CODE END task_staticAnimation */
