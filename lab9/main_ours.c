@@ -27,13 +27,14 @@
  */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
 #include "cmsis_os.h"
+#include "main.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <math.h>
 #include <stdio.h>
+
 #include "stm32f746g_discovery_lcd.h"
 //#include "stm32746g_discovery_lcd.h"
 #include "stm32746g_discovery_ts.h"
@@ -57,12 +58,22 @@ typedef StaticEventGroup_t osStaticEventGroupDef_t;
 #define TYPE_Y2 5
 #define TYPE_Z1 8
 #define TYPE_Z2 9
+volatile bool params_switch = 0;
+
+struct ControllerParams {
+  float Kp;
+  float Ki;
+  float Kd;
+};
+
+ControllerParams controller_params;
+
 #define PROCES_MANAGER_ANIMATION 50
 #define PROCES_MANAGER_PID_V 51
 #define PROCES_MANAGER_PID_H 52
 typedef struct {
-	uint8_t type;
-	float value;
+  uint8_t type;
+  float value;
 } Message;
 
 typedef struct {
@@ -104,76 +115,93 @@ SDRAM_HandleTypeDef hsdram1;
 
 /* Definitions for ltdcDriver */
 osThreadId_t ltdcDriverHandle;
-uint32_t ltdcDriverBuffer[ 1024 ];
+uint32_t ltdcDriverBuffer[1024];
 osStaticThreadDef_t ltdcDriverControlBlock;
 const osThreadAttr_t ltdcDriver_attributes = {
-  .name = "ltdcDriver",
-  .cb_mem = &ltdcDriverControlBlock,
-  .cb_size = sizeof(ltdcDriverControlBlock),
-  .stack_mem = &ltdcDriverBuffer[0],
-  .stack_size = sizeof(ltdcDriverBuffer),
-  .priority = (osPriority_t) osPriorityHigh,
+    .name = "ltdcDriver",
+    .cb_mem = &ltdcDriverControlBlock,
+    .cb_size = sizeof(ltdcDriverControlBlock),
+    .stack_mem = &ltdcDriverBuffer[0],
+    .stack_size = sizeof(ltdcDriverBuffer),
+    .priority = (osPriority_t)osPriorityHigh,
 };
+
 /* Definitions for processDriver */
 osThreadId_t processDriverHandle;
-uint32_t processDriverBuffer[ 512 ];
+uint32_t processDriverBuffer[512];
 osStaticThreadDef_t processDriverControlBlock;
 const osThreadAttr_t processDriver_attributes = {
-  .name = "processDriver",
-  .cb_mem = &processDriverControlBlock,
-  .cb_size = sizeof(processDriverControlBlock),
-  .stack_mem = &processDriverBuffer[0],
-  .stack_size = sizeof(processDriverBuffer),
-  .priority = (osPriority_t) osPriorityAboveNormal,
+    .name = "processDriver",
+    .cb_mem = &processDriverControlBlock,
+    .cb_size = sizeof(processDriverControlBlock),
+    .stack_mem = &processDriverBuffer[0],
+    .stack_size = sizeof(processDriverBuffer),
+    .priority = (osPriority_t)osPriorityAboveNormal,
 };
+
 /* Definitions for tsDriver */
 osThreadId_t tsDriverHandle;
-uint32_t tsDriverBuffer[ 512 ];
+uint32_t tsDriverBuffer[512];
 osStaticThreadDef_t tsDriverControlBlock;
 const osThreadAttr_t tsDriver_attributes = {
-  .name = "tsDriver",
-  .cb_mem = &tsDriverControlBlock,
-  .cb_size = sizeof(tsDriverControlBlock),
-  .stack_mem = &tsDriverBuffer[0],
-  .stack_size = sizeof(tsDriverBuffer),
-  .priority = (osPriority_t) osPriorityHigh,
+    .name = "tsDriver",
+    .cb_mem = &tsDriverControlBlock,
+    .cb_size = sizeof(tsDriverControlBlock),
+    .stack_mem = &tsDriverBuffer[0],
+    .stack_size = sizeof(tsDriverBuffer),
+    .priority = (osPriority_t)osPriorityHigh,
 };
+
 /* Definitions for controllerV */
 osThreadId_t controllerVHandle;
-uint32_t controllerVBuffer[ 512 ];
+uint32_t controllerVBuffer[512];
 osStaticThreadDef_t controllerVControlBlock;
 const osThreadAttr_t controllerV_attributes = {
-  .name = "controllerV",
-  .cb_mem = &controllerVControlBlock,
-  .cb_size = sizeof(controllerVControlBlock),
-  .stack_mem = &controllerVBuffer[0],
-  .stack_size = sizeof(controllerVBuffer),
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "controllerV",
+    .cb_mem = &controllerVControlBlock,
+    .cb_size = sizeof(controllerVControlBlock),
+    .stack_mem = &controllerVBuffer[0],
+    .stack_size = sizeof(controllerVBuffer),
+    .priority = (osPriority_t)osPriorityNormal,
 };
+
 /* Definitions for controllerH */
 osThreadId_t controllerHHandle;
-uint32_t controllerHBuffer[ 512 ];
+uint32_t controllerHBuffer[512];
 osStaticThreadDef_t controllerHControlBlock;
 const osThreadAttr_t controllerH_attributes = {
-  .name = "controllerH",g
-  .cb_mem = &controllerHControlBlock,
-  .cb_size = sizeof(controllerHControlBlock),
-  .stack_mem = &controllerHBuffer[0],
-  .stack_size = sizeof(controllerHBuffer),
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "controllerH",
+    .cb_mem = &controllerHControlBlock,
+    .cb_size = sizeof(controllerHControlBlock),
+    .stack_mem = &controllerHBuffer[0],
+    .stack_size = sizeof(controllerHBuffer),
+    .priority = (osPriority_t)osPriorityNormal,
 };
 
 /* Definitions for staticAnimation */
 osThreadId_t staticAnimationHandle;
-uint32_t staticAnimationBuffer[ 512 ];
+uint32_t staticAnimationBuffer[512];
 osStaticThreadDef_t staticAnimationControlBlock;
 const osThreadAttr_t staticAnimation_attributes = {
-  .name = "staticAnimation",
-  .cb_mem = &staticAnimationControlBlock,
-  .cb_size = sizeof(staticAnimationControlBlock),
-  .stack_mem = &staticAnimationBuffer[0],
-  .stack_size = sizeof(staticAnimationBuffer),
-  .priority = (osPriority_t) osPriorityLow,
+    .name = "staticAnimation",
+    .cb_mem = &staticAnimationControlBlock,
+    .cb_size = sizeof(staticAnimationControlBlock),
+    .stack_mem = &staticAnimationBuffer[0],
+    .stack_size = sizeof(staticAnimationBuffer),
+    .priority = (osPriority_t)osPriorityLow,
+};
+
+/* Definitions for controller param changer */
+osThreadId_t CPCHandle;
+uint32_t cpc_buffer[512];
+osStaticThreadDef_t cpc_controll_block;
+const osThreadAttr_t cpc_attributes = {
+    .name = "controller_parameters_change",
+    .cb_mem = &cpc_controll_block,
+    .cb_size = sizeof(cpc_controll_block),
+    .stack_mem = &cpc_buffer[0],
+    .stack_size = sizeof(cpc_buffer),
+    .priority = (osPriority_t)osPriorityLow,
 };
 /* Definitions for procesManager */
 osThredId_t procesManagerHandle;
@@ -212,18 +240,18 @@ const osMessageQueueAttr_t qDrawControlBlock = {
 
 /* Definitions for qProcess */
 osMessageQueueId_t qProcessHandle;
-uint8_t qProcessBuffer[ 16 * sizeof( Message ) ];
+uint8_t qProcessBuffer[16 * sizeof(Message)];
 osStaticMessageQDef_t qProcessControlBlock;
 const osMessageQueueAttr_t qProcess_attributes = {
-  .name = "qProcess",
-  .cb_mem = &qProcessControlBlock,
-  .cb_size = sizeof(qProcessControlBlock),
-  .mq_mem = &qProcessBuffer,
-  .mq_size = sizeof(qProcessBuffer)
-};
+    .name = "qProcess",
+    .cb_mem = &qProcessControlBlock,
+    .cb_size = sizeof(qProcessControlBlock),
+    .mq_mem = &qProcessBuffer,
+    .mq_size = sizeof(qProcessBuffer)};
+
 /* Definitions for qLTDCReady */
 osMessageQueueId_t qLTDCReadyHandle;
-uint8_t qLTDCReadyBuffer[ 1 * sizeof( uint16_t ) ];
+uint8_t qLTDCReadyBuffer[1 * sizeof(uint16_t)];
 osStaticMessageQDef_t qLTDCReadyControlBlock;
 const osMessageQueueAttr_t qLTDCReady_attributes = {
   .name = "qLTDCReady",
@@ -245,84 +273,107 @@ const osMessageQueueAttr_t qProcesLCDManager_attributes = {
 };
 /* Definitions for qTSState */
 osMessageQueueId_t qTSStateHandle;
-uint8_t qTSStateBuffer[ 16 * sizeof( TS_StateTypeDef ) ];
+uint8_t qTSStateBuffer[16 * sizeof(TS_StateTypeDef)];
 osStaticMessageQDef_t qTSStateControlBlock;
 const osMessageQueueAttr_t qTSState_attributes = {
-  .name = "qTSState",
-  .cb_mem = &qTSStateControlBlock,
-  .cb_size = sizeof(qTSStateControlBlock),
-  .mq_mem = &qTSStateBuffer,
-  .mq_size = sizeof(qTSStateBuffer)
-};
+    .name = "qTSState",
+    .cb_mem = &qTSStateControlBlock,
+    .cb_size = sizeof(qTSStateControlBlock),
+    .mq_mem = &qTSStateBuffer,
+    .mq_size = sizeof(qTSStateBuffer)};
+
 /* Definitions for qControllerV */
 osMessageQueueId_t qControllerVHandle;
-uint8_t qControllerVBuffer[ 16 * sizeof( Message ) ];
+uint8_t qControllerVBuffer[16 * sizeof(Message)];
 osStaticMessageQDef_t qControllerVControlBlock;
 const osMessageQueueAttr_t qControllerV_attributes = {
-  .name = "qControllerV",
-  .cb_mem = &qControllerVControlBlock,
-  .cb_size = sizeof(qControllerVControlBlock),
-  .mq_mem = &qControllerVBuffer,
-  .mq_size = sizeof(qControllerVBuffer)
-};
+    .name = "qControllerV",
+    .cb_mem = &qControllerVControlBlock,
+    .cb_size = sizeof(qControllerVControlBlock),
+    .mq_mem = &qControllerVBuffer,
+    .mq_size = sizeof(qControllerVBuffer)};
 
 /* Definitions for qControllerH */
 osMessageQueueId_t qControllerHHandle;
-uint8_t qControllerHBuffer[ 16 * sizeof( Message ) ];
+uint8_t qControllerHBuffer[16 * sizeof(Message)];
 osStaticMessageQDef_t qControllerHControlBlock;
 const osMessageQueueAttr_t qControllerH_attributes = {
-  .name = "qControllerH",
-  .cb_mem = &qControllerHControlBlock,
-  .cb_size = sizeof(qControllerHControlBlock),
-  .mq_mem = &qControllerHBuffer,
-  .mq_size = sizeof(qControllerHBuffer)
-};
+    .name = "qControllerH",
+    .cb_mem = &qControllerHControlBlock,
+    .cb_size = sizeof(qControllerHControlBlock),
+    .mq_mem = &qControllerHBuffer,
+    .mq_size = sizeof(qControllerHBuffer)};
+
+/* Definitions for qControllerParams - dynamic change reg params */
+osMessageQueueId_t qControllerParamsHandle;
+uint8_t qControllerParamsBuffer[16 * sizeof(Message)];
+osStaticMessageQDef_t qControllerParamsBlock;
+const osMessageQueueAttr_t qControllerH_attributes = {
+    .name = "qControllerH",
+    .cb_mem = &qControllerParamsBlock,
+    .cb_size = sizeof(qControllerParamsBlock),
+    .mq_mem = &qControllerParamsBuffer,
+    .mq_size = sizeof(qControllerParamsBuffer)};
 
 /* Definitions for process */
 osTimerId_t processHandle;
-osTimerId_t controllerVProcessHandle;
-osTimerId_t controllerHProcessHandle;
+osTimerId_t qcontrollerVProcessHandle;
+osTimerId_t qcontrollerHProcessHandle;
+osTimerId_t qcontrollerParamsHandle;
 
 osStaticTimerDef_t processControlBlock;
 const osTimerAttr_t process_attributes = {
-  .name = "process",
-  .cb_mem = &processControlBlock,
-  .cb_size = sizeof(processControlBlock),
+    .name = "process",
+    .cb_mem = &processControlBlock,
+    .cb_size = sizeof(processControlBlock),
 };
+
 /* Definitions for mProcess */
 osMutexId_t mProcessHandle;
 osStaticMutexDef_t mProcessControlBlock;
 const osMutexAttr_t mProcess_attributes = {
-  .name = "mProcess",
-  .cb_mem = &mProcessControlBlock,
-  .cb_size = sizeof(mProcessControlBlock),
+    .name = "mProcess",
+    .cb_mem = &mProcessControlBlock,
+    .cb_size = sizeof(mProcessControlBlock),
 };
+
 /* Definitions for sLTDC */
 osSemaphoreId_t sLTDCHandle;
+osSemaphoreId_t sControllerParamsHandle;
 osStaticSemaphoreDef_t sLTDCControlBlock;
 const osSemaphoreAttr_t sLTDC_attributes = {
-  .name = "sLTDC",
-  .cb_mem = &sLTDCControlBlock,
-  .cb_size = sizeof(sLTDCControlBlock),
+    .name = "sLTDC",
+    .cb_mem = &sLTDCControlBlock,
+    .cb_size = sizeof(sLTDCControlBlock),
 };
+
 /* Definitions for eLTDCReady */
 osEventFlagsId_t eLTDCReadyHandle;
 osStaticEventGroupDef_t eLTDCReadyControlBlock;
 const osEventFlagsAttr_t eLTDCReady_attributes = {
-  .name = "eLTDCReady",
-  .cb_mem = &eLTDCReadyControlBlock,
-  .cb_size = sizeof(eLTDCReadyControlBlock),
+    .name = "eLTDCReady",
+    .cb_mem = &eLTDCReadyControlBlock,
+    .cb_size = sizeof(eLTDCReadyControlBlock),
 };
+
+osEventFlagsId_t eCPCReadyHandle;
+osStaticEventGroupDef_t eCPCReadyControlBlock;
+const osEventFlagsAttr_t eCPCReady_attributes = {
+    .name = "eCPCReady",
+    .cb_mem = &eCPCReadyControlBlock,
+    .cb_size = sizeof(eCPCReadyControlBlock),
+};
+
 /* USER CODE BEGIN PV */
-uint32_t ADC3_buffer[2] = { 0 }; /* !REMOTE */
+uint32_t ADC3_buffer[2] = {0}; /* !REMOTE */
 
 uint8_t buffer_id = 0;
-uint32_t layer[2] = { 0xC0000000 + 480 * 272 * 4 * 0, 0xC0000000
-		+ 480 * 272 * 4 * 2 };
+uint32_t layer[2] = {0xC0000000 + 480 * 272 * 4 * 0,
+                     0xC0000000 + 480 * 272 * 4 * 2};
 char LCD_Text0[100] = "LCD_TEST0";
 char LCD_Text1[100] = "LCD_TEST1";
 char LCD_Text2[100] = "LCD_TEST2";
-TS_StateTypeDef TS_State = { 0 };
+TS_StateTypeDef TS_State = {0};
 
 float cu1 = 0.0f;
 float cu2 = 0.0f;
@@ -350,61 +401,91 @@ void task_tsDriver(void *argument);
 void task_controllerV(void *argument);
 void task_controllerH(void *argument);
 void task_staticAnimation(void *argument);
+void taskControllerParametersChange(void *argument);
 void task_procesManager(void *argument);
 void timer_process(void *argument);
 
 /* USER CODE BEGIN PFP */
-void swap_buffers(void) {
-	BSP_LCD_SetLayerAddress(0, layer[0]);
-	BSP_LCD_SetLayerAddress(1, layer[1]);
-	buffer_id = buffer_id == 0 ? 1 : 0;
 
-	if (buffer_id == 1) {
-		layer[0] = 0xC0000000 + 480 * 272 * 4 * (0 + 0);
-		layer[1] = 0xC0000000 + 480 * 272 * 4 * (0 + 2);
-	} else {
-		layer[0] = 0xC0000000 + 480 * 272 * 4 * (1 + 0);
-		layer[1] = 0xC0000000 + 480 * 272 * 4 * (1 + 2);
-	}
+void changeRegulatorParams(void) {
+  if (params_switch) {
+    params_switch = !params_switch;
+    controller_params.Kp = 14;
+    controller_params.Ki = 13;
+    controller_params.Kd = 12;
+    return;
+  }
+  controller_params.Kp = 3;
+  controller_params.Ki = 2;
+  controller_params.Kd = 1;
+}
+
+void swap_buffers(void) {
+  BSP_LCD_SetLayerAddress(0, layer[0]);
+  BSP_LCD_SetLayerAddress(1, layer[1]);
+  buffer_id = buffer_id == 0 ? 1 : 0;
+
+  if (buffer_id == 1) {
+    layer[0] = 0xC0000000 + 480 * 272 * 4 * (0 + 0);
+    layer[1] = 0xC0000000 + 480 * 272 * 4 * (0 + 2);
+  } else {
+    layer[0] = 0xC0000000 + 480 * 272 * 4 * (1 + 0);
+    layer[1] = 0xC0000000 + 480 * 272 * 4 * (1 + 2);
+  }
 }
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-	if (GPIO_Pin == LCD_INT_Pin) {
-		BSP_TS_GetState(&TS_State);
-		osMessageQueuePut(qTSStateHandle, &TS_State, 0, 0);
-	}
+  if (GPIO_Pin == LCD_INT_Pin) {
+    BSP_TS_GetState(&TS_State);
+    osMessageQueuePut(qTSStateHandle, &TS_State, 0, 0);
+  }
 }
 
 void HAL_LTDC_LineEventCallback(LTDC_HandleTypeDef *hltdc) {
-	if (osSemaphoreAcquire(sLTDCHandle, 0) == osOK) {
-		swap_buffers();
-		osSemaphoreRelease(sLTDCHandle);
+  if (osSemaphoreAcquire(sLTDCHandle, 0) == osOK) {
+    swap_buffers();
+    osSemaphoreRelease(sLTDCHandle);
 
-		osEventFlagsSet(eLTDCReadyHandle, 0x00000001U);
-	}
-	HAL_LTDC_ProgramLineEvent(hltdc, 272);
+    osEventFlagsSet(eLTDCReadyHandle, 0x00000001U);
+  }
+  HAL_LTDC_ProgramLineEvent(hltdc, 272);
+}
+
+// unable do find function definition so used with custom name -> 99.9% wrong
+void taskControllerParametersChange(void) {
+  if (osSemaphoreAcquire(sControllerParamsHandle, 0) == osOK) {
+    changeRegulatorParams();
+    osSemaphoreRelease(sControllerParamsHandle);
+
+    osEventFlagsSet(eCPCReadyHandle, 0x00000001U);
+  }
 }
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
-int main(void)
-{
+ * @brief  The application entry point.
+ * @retval int
+ */
+int main(void) {
   /* USER CODE BEGIN 1 */
+  controller_params.Pi = 3.0;
+  controller_params.Ki = 2.0;
+  controller_params.Di = 1.0;
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick.
+   */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-	HAL_Delay(100); /*! Delay so that LCD will not restart during initialisation !*/
+  HAL_Delay(
+      100); /*! Delay so that LCD will not restart during initialisation !*/
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -423,13 +504,16 @@ int main(void)
   MX_ADC3_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-	BSP_TS_Init(0, 0); // initialisation of TouchScreen -- arguments are irrelevant
-	  BSP_TS_ITConfig(); // to cancel exti interrupts from the touch screen comment this line
+  BSP_TS_Init(0,
+              0);  // initialisation of TouchScreen -- arguments are irrelevant
+  BSP_TS_ITConfig();  // to cancel exti interrupts from the touch screen comment
+                      // this line
 
-	HAL_ADC_Start_DMA(&hadc3, ADC3_buffer, 2);
-	HAL_Delay(100); // wait for everything to set up before the controller loop starts
+  HAL_ADC_Start_DMA(&hadc3, ADC3_buffer, 2);
+  HAL_Delay(
+      100);  // wait for everything to set up before the controller loop starts
 
-	HAL_LTDC_ProgramLineEvent(&hltdc, 272);
+  HAL_LTDC_ProgramLineEvent(&hltdc, 272);
 
   /* USER CODE END 2 */
 
@@ -440,7 +524,7 @@ int main(void)
   mProcessHandle = osMutexNew(&mProcess_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
-	/* add mutexes, ... */
+  /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
   /* Create the semaphores(s) */
@@ -448,19 +532,21 @@ int main(void)
   sLTDCHandle = osSemaphoreNew(1, 1, &sLTDC_attributes);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-	/* add semaphores, ... */
+  /* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* Create the timer(s) */
   /* creation of process */
-  processHandle = osTimerNew(timer_process, osTimerPeriodic, NULL, &process_attributes);
-  controllerVProcessHandle = osTimerNew(task_controllerV, osTimerPeriodic, NULL, &process_attributes);
-  controllerHProcessHandle = osTimerNew(task_controllerH, osTimerPeriodic, NULL, &process_attributes);
+  processHandle =
+      osTimerNew(timer_process, osTimerPeriodic, NULL, &process_attributes);
+  qcontrollerVProcessHandle =
+      osTimerNew(task_controllerV, osTimerPeriodic, NULL, &process_attributes);
+  qcontrollerHProcessHandle =
+      osTimerNew(task_controllerH, osTimerPeriodic, NULL, &process_attributes);
 
   /* USER CODE BEGIN RTOS_TIMERS */
-	/* start timers, add new ones, ... */
+  /* start timers, add new ones, ... */
   // LOOKATME Tutaj należy dodać konfigurację timerów (ich okres odpalenia)
-  //osTimerStart(task_staticAnimation, 10);
 	osTimerStart(processHandle, 10);
   osTimerStart(controllerVProcessHandle, 200);
   osTimerStart(controllerHProcessHandle, 40);
@@ -469,19 +555,23 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of qProcess */
-  qProcessHandle = osMessageQueueNew (16, sizeof(Message), &qProcess_attributes);
+  qProcessHandle = osMessageQueueNew(16, sizeof(Message), &qProcess_attributes);
 
   /* creation of qLTDCReady */
-  qLTDCReadyHandle = osMessageQueueNew (1, sizeof(uint16_t), &qLTDCReady_attributes);
+  qLTDCReadyHandle =
+      osMessageQueueNew(1, sizeof(uint16_t), &qLTDCReady_attributes);
 
   /* creation of qTSState */
-  qTSStateHandle = osMessageQueueNew (16, sizeof(TS_StateTypeDef), &qTSState_attributes);
+  qTSStateHandle =
+      osMessageQueueNew(16, sizeof(TS_StateTypeDef), &qTSState_attributes);
 
   /* creation of qControllerV */
-  qControllerVHandle = osMessageQueueNew (16, sizeof(Message), &qControllerV_attributes);
+  qControllerVHandle =
+      osMessageQueueNew(16, sizeof(Message), &qControllerV_attributes);
 
   /* creation of qControllerH */
-  qControllerHHandle = osMessageQueueNew (16, sizeof(Message), &qControllerH_attributes);
+  qControllerHHandle =
+      osMessageQueueNew(16, sizeof(Message), &qControllerH_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   qProcesManagerHandle = osThreadNew(16, sizeof(TickMessage), &qStaticAnimation_attributes);
@@ -495,19 +585,26 @@ int main(void)
   ltdcDriverHandle = osThreadNew(task_ltdcDriver, NULL, &ltdcDriver_attributes);
 
   /* creation of processDriver */
-  processDriverHandle = osThreadNew(task_processDriver, NULL, &processDriver_attributes);
+  processDriverHandle =
+      osThreadNew(task_processDriver, NULL, &processDriver_attributes);
 
   /* creation of tsDriver */
   tsDriverHandle = osThreadNew(task_tsDriver, NULL, &tsDriver_attributes);
 
   /* creation of controllerV */
-  controllerVHandle = osThreadNew(task_controllerV, NULL, &controllerV_attributes);
+  controllerVHandle =
+      osThreadNew(task_controllerV, NULL, &controllerV_attributes);
 
   /* creation of controllerV */
-  controllerHHandle = osThreadNew(task_controllerH, NULL, &controllerH_attributes);
+  controllerHHandle =
+      osThreadNew(task_controllerH, NULL, &controllerH_attributes);
 
   /* creation of staticAnimation */
-  staticAnimationHandle = osThreadNew(task_staticAnimation, NULL, &staticAnimation_attributes);
+  staticAnimationHandle =
+      osThreadNew(task_staticAnimation, NULL, &staticAnimation_attributes);
+
+  CPCHandle =
+      osThreadNew(taskControllerParametersChange, NULL, &cpc_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* creation of procesManager */
@@ -519,7 +616,7 @@ int main(void)
   eLTDCReadyHandle = osEventFlagsNew(&eLTDCReady_attributes);
 
   /* USER CODE BEGIN RTOS_EVENTS */
-	/* add events, ... */
+  /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -529,33 +626,32 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-	while (1) {
+  while (1) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	}
+  }
   /* USER CODE END 3 */
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
-void SystemClock_Config(void)
-{
+ * @brief System Clock Configuration
+ * @retval None
+ */
+void SystemClock_Config(void) {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Configure LSE Drive Capability
-  */
+   */
   HAL_PWR_EnableBkUpAccess();
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
@@ -564,39 +660,34 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLN = 432;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
     Error_Handler();
   }
   /** Activate the Over-Drive mode
-  */
-  if (HAL_PWREx_EnableOverDrive() != HAL_OK)
-  {
+   */
+  if (HAL_PWREx_EnableOverDrive() != HAL_OK) {
     Error_Handler();
   }
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
+                                RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK)
-  {
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_7) != HAL_OK) {
     Error_Handler();
   }
 }
 
 /**
-  * @brief ADC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC1_Init(void)
-{
-
+ * @brief ADC1 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_ADC1_Init(void) {
   /* USER CODE BEGIN ADC1_Init 0 */
 
   /* USER CODE END ADC1_Init 0 */
@@ -606,8 +697,9 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 1 */
 
   /* USER CODE END ADC1_Init 1 */
-  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-  */
+  /** Configure the global features of the ADC (Clock, Resolution, Data
+   * Alignment and number of conversion)
+   */
   hadc1.Instance = ADC1;
   hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
@@ -620,33 +712,29 @@ static void MX_ADC1_Init(void)
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-  if (HAL_ADC_Init(&hadc1) != HAL_OK)
-  {
+  if (HAL_ADC_Init(&hadc1) != HAL_OK) {
     Error_Handler();
   }
-  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-  */
+  /** Configure for the selected ADC regular channel its corresponding rank in
+   * the sequencer and its sample time.
+   */
   sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
-
 }
 
 /**
-  * @brief ADC3 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC3_Init(void)
-{
-
+ * @brief ADC3 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_ADC3_Init(void) {
   /* USER CODE BEGIN ADC3_Init 0 */
 
   /* USER CODE END ADC3_Init 0 */
@@ -656,8 +744,9 @@ static void MX_ADC3_Init(void)
   /* USER CODE BEGIN ADC3_Init 1 */
 
   /* USER CODE END ADC3_Init 1 */
-  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-  */
+  /** Configure the global features of the ADC (Clock, Resolution, Data
+   * Alignment and number of conversion)
+   */
   hadc3.Instance = ADC3;
   hadc3.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc3.Init.Resolution = ADC_RESOLUTION_12B;
@@ -670,41 +759,37 @@ static void MX_ADC3_Init(void)
   hadc3.Init.NbrOfConversion = 2;
   hadc3.Init.DMAContinuousRequests = ENABLE;
   hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-  if (HAL_ADC_Init(&hadc3) != HAL_OK)
-  {
+  if (HAL_ADC_Init(&hadc3) != HAL_OK) {
     Error_Handler();
   }
-  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-  */
+  /** Configure for the selected ADC regular channel its corresponding rank in
+   * the sequencer and its sample time.
+   */
   sConfig.Channel = ADC_CHANNEL_6;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_56CYCLES;
-  if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
-  {
+  if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
     Error_Handler();
   }
-  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-  */
+  /** Configure for the selected ADC regular channel its corresponding rank in
+   * the sequencer and its sample time.
+   */
   sConfig.Channel = ADC_CHANNEL_7;
   sConfig.Rank = ADC_REGULAR_RANK_2;
-  if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
-  {
+  if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN ADC3_Init 2 */
 
   /* USER CODE END ADC3_Init 2 */
-
 }
 
 /**
-  * @brief DMA2D Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_DMA2D_Init(void)
-{
-
+ * @brief DMA2D Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_DMA2D_Init(void) {
   /* USER CODE BEGIN DMA2D_Init 0 */
 
   /* USER CODE END DMA2D_Init 0 */
@@ -720,28 +805,23 @@ static void MX_DMA2D_Init(void)
   hdma2d.LayerCfg[1].InputColorMode = DMA2D_INPUT_ARGB8888;
   hdma2d.LayerCfg[1].AlphaMode = DMA2D_NO_MODIF_ALPHA;
   hdma2d.LayerCfg[1].InputAlpha = 0;
-  if (HAL_DMA2D_Init(&hdma2d) != HAL_OK)
-  {
+  if (HAL_DMA2D_Init(&hdma2d) != HAL_OK) {
     Error_Handler();
   }
-  if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK)
-  {
+  if (HAL_DMA2D_ConfigLayer(&hdma2d, 1) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN DMA2D_Init 2 */
 
   /* USER CODE END DMA2D_Init 2 */
-
 }
 
 /**
-  * @brief LTDC Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_LTDC_Init(void)
-{
-
+ * @brief LTDC Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_LTDC_Init(void) {
   /* USER CODE BEGIN LTDC_Init 0 */
 
   /* USER CODE END LTDC_Init 0 */
@@ -768,8 +848,7 @@ static void MX_LTDC_Init(void)
   hltdc.Init.Backcolor.Blue = 0;
   hltdc.Init.Backcolor.Green = 0;
   hltdc.Init.Backcolor.Red = 0;
-  if (HAL_LTDC_Init(&hltdc) != HAL_OK)
-  {
+  if (HAL_LTDC_Init(&hltdc) != HAL_OK) {
     Error_Handler();
   }
   pLayerCfg.WindowX0 = 0;
@@ -787,8 +866,7 @@ static void MX_LTDC_Init(void)
   pLayerCfg.Backcolor.Blue = 0;
   pLayerCfg.Backcolor.Green = 0;
   pLayerCfg.Backcolor.Red = 0;
-  if (HAL_LTDC_ConfigLayer(&hltdc, &pLayerCfg, 0) != HAL_OK)
-  {
+  if (HAL_LTDC_ConfigLayer(&hltdc, &pLayerCfg, 0) != HAL_OK) {
     Error_Handler();
   }
   pLayerCfg1.WindowX0 = 0;
@@ -800,36 +878,32 @@ static void MX_LTDC_Init(void)
   pLayerCfg1.Alpha0 = 0;
   pLayerCfg1.BlendingFactor1 = LTDC_BLENDING_FACTOR1_PAxCA;
   pLayerCfg1.BlendingFactor2 = LTDC_BLENDING_FACTOR2_PAxCA;
-  pLayerCfg1.FBStartAdress = 0xC0000000+480*272*4;
+  pLayerCfg1.FBStartAdress = 0xC0000000 + 480 * 272 * 4;
   pLayerCfg1.ImageWidth = 480;
   pLayerCfg1.ImageHeight = 272;
   pLayerCfg1.Backcolor.Blue = 0;
   pLayerCfg1.Backcolor.Green = 0;
   pLayerCfg1.Backcolor.Red = 0;
-  if (HAL_LTDC_ConfigLayer(&hltdc, &pLayerCfg1, 1) != HAL_OK)
-  {
+  if (HAL_LTDC_ConfigLayer(&hltdc, &pLayerCfg1, 1) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN LTDC_Init 2 */
-	BSP_LCD_LayerDefaultInit(0, pLayerCfg.FBStartAdress);
-	BSP_LCD_LayerDefaultInit(1, pLayerCfg1.FBStartAdress);
-	/* Assert display enable LCD_DISP pin */
-	HAL_GPIO_WritePin(LCD_DISP_GPIO_Port, LCD_DISP_Pin, GPIO_PIN_SET);
+  BSP_LCD_LayerDefaultInit(0, pLayerCfg.FBStartAdress);
+  BSP_LCD_LayerDefaultInit(1, pLayerCfg1.FBStartAdress);
+  /* Assert display enable LCD_DISP pin */
+  HAL_GPIO_WritePin(LCD_DISP_GPIO_Port, LCD_DISP_Pin, GPIO_PIN_SET);
 
-	/* Assert backlight LCD_BL_CTRL pin */
-	HAL_GPIO_WritePin(LCD_BL_CTRL_GPIO_Port, LCD_BL_CTRL_Pin, GPIO_PIN_SET);
+  /* Assert backlight LCD_BL_CTRL pin */
+  HAL_GPIO_WritePin(LCD_BL_CTRL_GPIO_Port, LCD_BL_CTRL_Pin, GPIO_PIN_SET);
   /* USER CODE END LTDC_Init 2 */
-
 }
 
 /**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART1_UART_Init(void)
-{
-
+ * @brief USART1 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_USART1_UART_Init(void) {
   /* USER CODE BEGIN USART1_Init 0 */
 
   /* USER CODE END USART1_Init 0 */
@@ -847,22 +921,18 @@ static void MX_USART1_UART_Init(void)
   huart1.Init.OverSampling = UART_OVERSAMPLING_16;
   huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
+  if (HAL_UART_Init(&huart1) != HAL_OK) {
     Error_Handler();
   }
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
-
 }
 
 /**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
+ * Enable DMA controller clock
+ */
+static void MX_DMA_Init(void) {
   /* DMA controller clock enable */
   __HAL_RCC_DMA2_CLK_ENABLE();
 
@@ -870,15 +940,12 @@ static void MX_DMA_Init(void)
   /* DMA2_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
-
 }
 
 /* FMC initialization function */
-static void MX_FMC_Init(void)
-{
-
+static void MX_FMC_Init(void) {
   /* USER CODE BEGIN FMC_Init 0 */
-	FMC_SDRAM_CommandTypeDef Command;
+  FMC_SDRAM_CommandTypeDef Command;
 
   /* USER CODE END FMC_Init 0 */
 
@@ -889,7 +956,7 @@ static void MX_FMC_Init(void)
   /* USER CODE END FMC_Init 1 */
 
   /** Perform the SDRAM1 memory initialization sequence
-  */
+   */
   hsdram1.Instance = FMC_SDRAM_DEVICE;
   /* hsdram1.Init */
   hsdram1.Init.SDBank = FMC_SDRAM_BANK1;
@@ -911,74 +978,71 @@ static void MX_FMC_Init(void)
   SdramTiming.RPDelay = 2;
   SdramTiming.RCDDelay = 2;
 
-  if (HAL_SDRAM_Init(&hsdram1, &SdramTiming) != HAL_OK)
-  {
-    Error_Handler( );
+  if (HAL_SDRAM_Init(&hsdram1, &SdramTiming) != HAL_OK) {
+    Error_Handler();
   }
 
   /* USER CODE BEGIN FMC_Init 2 */
-	__IO uint32_t tmpmrd = 0;
-	/* Step 3:  Configure a clock configuration enable command */
-	Command.CommandMode = FMC_SDRAM_CMD_CLK_ENABLE;
-	Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
-	Command.AutoRefreshNumber = 1;
-	Command.ModeRegisterDefinition = 0;
+  __IO uint32_t tmpmrd = 0;
+  /* Step 3:  Configure a clock configuration enable command */
+  Command.CommandMode = FMC_SDRAM_CMD_CLK_ENABLE;
+  Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
+  Command.AutoRefreshNumber = 1;
+  Command.ModeRegisterDefinition = 0;
 
-	/* Send the command */
-	HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
+  /* Send the command */
+  HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
 
-	/* Step 4: Insert 100 us minimum delay */
-	/* Inserted delay is equal to 1 ms due to systick time base unit (ms) */
-	HAL_Delay(1);
+  /* Step 4: Insert 100 us minimum delay */
+  /* Inserted delay is equal to 1 ms due to systick time base unit (ms) */
+  HAL_Delay(1);
 
-	/* Step 5: Configure a PALL (precharge all) command */
-	Command.CommandMode = FMC_SDRAM_CMD_PALL;
-	Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
-	Command.AutoRefreshNumber = 1;
-	Command.ModeRegisterDefinition = 0;
+  /* Step 5: Configure a PALL (precharge all) command */
+  Command.CommandMode = FMC_SDRAM_CMD_PALL;
+  Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
+  Command.AutoRefreshNumber = 1;
+  Command.ModeRegisterDefinition = 0;
 
-	/* Send the command */
-	HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
+  /* Send the command */
+  HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
 
-	/* Step 6 : Configure a Auto-Refresh command */
-	Command.CommandMode = FMC_SDRAM_CMD_AUTOREFRESH_MODE;
-	Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
-	Command.AutoRefreshNumber = 8;
-	Command.ModeRegisterDefinition = 0;
+  /* Step 6 : Configure a Auto-Refresh command */
+  Command.CommandMode = FMC_SDRAM_CMD_AUTOREFRESH_MODE;
+  Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
+  Command.AutoRefreshNumber = 8;
+  Command.ModeRegisterDefinition = 0;
 
-	/* Send the command */
-	HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
+  /* Send the command */
+  HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
 
-	/* Step 7: Program the external memory mode register */
-	tmpmrd = (uint32_t) SDRAM_MODEREG_BURST_LENGTH_1 |
-	SDRAM_MODEREG_BURST_TYPE_SEQUENTIAL |
-	SDRAM_MODEREG_CAS_LATENCY_2 |
-	SDRAM_MODEREG_OPERATING_MODE_STANDARD |
-	SDRAM_MODEREG_WRITEBURST_MODE_SINGLE;
+  /* Step 7: Program the external memory mode register */
+  tmpmrd = (uint32_t)SDRAM_MODEREG_BURST_LENGTH_1 |
+           SDRAM_MODEREG_BURST_TYPE_SEQUENTIAL | SDRAM_MODEREG_CAS_LATENCY_2 |
+           SDRAM_MODEREG_OPERATING_MODE_STANDARD |
+           SDRAM_MODEREG_WRITEBURST_MODE_SINGLE;
 
-	Command.CommandMode = FMC_SDRAM_CMD_LOAD_MODE;
-	Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
-	Command.AutoRefreshNumber = 1;
-	Command.ModeRegisterDefinition = tmpmrd;
+  Command.CommandMode = FMC_SDRAM_CMD_LOAD_MODE;
+  Command.CommandTarget = FMC_SDRAM_CMD_TARGET_BANK1;
+  Command.AutoRefreshNumber = 1;
+  Command.ModeRegisterDefinition = tmpmrd;
 
-	/* Send the command */
-	HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
+  /* Send the command */
+  HAL_SDRAM_SendCommand(&hsdram1, &Command, SDRAM_TIMEOUT);
 
-	/* Step 8: Set the refresh rate counter */
-	/* (15.62 us x Freq) - 20 */
-	/* Set the device refresh counter */
-	hsdram1.Instance->SDRTR |= ((uint32_t) ((1292) << 1));
+  /* Step 8: Set the refresh rate counter */
+  /* (15.62 us x Freq) - 20 */
+  /* Set the device refresh counter */
+  hsdram1.Instance->SDRTR |= ((uint32_t)((1292) << 1));
 
   /* USER CODE END FMC_Init 2 */
 }
 
 /**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_GPIO_Init(void)
-{
+ * @brief GPIO Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_GPIO_Init(void) {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
@@ -1015,7 +1079,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(LCD_DISP_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PI11 LCD_INT_Pin */
-  GPIO_InitStruct.Pin = GPIO_PIN_11|LCD_INT_Pin;
+  GPIO_InitStruct.Pin = GPIO_PIN_11 | LCD_INT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
@@ -1029,24 +1093,23 @@ static void MX_GPIO_Init(void)
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
-
 }
 
 /* USER CODE BEGIN 4 */
 void DrawPointOfTouch(TS_StateTypeDef *TSS) {
-	static uint16_t lastx = 0;
-	static uint16_t lasty = 0;
-	BSP_LCD_SetTextColor(LCD_COLOR_TRANSPARENT);
-	BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 3, layer[1]);
-	BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 2, layer[1]);
-	if (TSS->touchDetected > 0) {
-		lastx = TSS->touchX[0];
-		lasty = TSS->touchY[0];
-		BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
-		BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 3, layer[1]);
-		BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
-		BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 2, layer[1]);
-	}
+  static uint16_t lastx = 0;
+  static uint16_t lasty = 0;
+  BSP_LCD_SetTextColor(LCD_COLOR_TRANSPARENT);
+  BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 3, layer[1]);
+  BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 2, layer[1]);
+  if (TSS->touchDetected > 0) {
+    lastx = TSS->touchX[0];
+    lasty = TSS->touchY[0];
+    BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
+    BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 3, layer[1]);
+    BSP_LCD_SetTextColor(LCD_COLOR_WHITE);
+    BSP_LCD_DrawCircle_AtAddr(lastx, lasty, 2, layer[1]);
+  }
 }
 /* USER CODE END 4 */
 
@@ -1057,8 +1120,7 @@ void DrawPointOfTouch(TS_StateTypeDef *TSS) {
  * @retval None
  */
 /* USER CODE END Header_task_ltdcDriver */
-void task_ltdcDriver(void *argument)
-{
+void task_ltdcDriver(void *argument) {
   /* USER CODE BEGIN 5 */
 	/* Infinite loop */
   ManagerMessage msg;
@@ -1117,11 +1179,6 @@ void task_ltdcDriver(void *argument)
 				layer[0]);
 		// TODO Rozwinąć funkcjonalność o rysowanie nowych elementów
 
-//		BSP_LCD_DrawRect_AtAddr(150, 100, 20, 30, layer[0]);
-//		BSP_LCD_DrawPolygon_AtAddr(list, 4, layer[0]);
-
-		BSP_LCD_DrawLine_AtAddr(Xlist[3], Ylist[3], Xlist[0], Ylist[0], layer[0]);
-
 		// draw on top layer
 		BSP_LCD_SelectLayer(1); // select colors and fonts for the top layer
 		BSP_LCD_SetTextColor(LCD_COLOR_BLACK);
@@ -1151,33 +1208,35 @@ void task_ltdcDriver(void *argument)
  * @retval None
  */
 /* USER CODE END Header_task_processDriver */
-void task_processDriver(void *argument)
-{
+void task_processDriver(void *argument) {
   /* USER CODE BEGIN task_processDriver */
-	/* Infinite loop */
-	Message m = { .type = 0, .value = 0.0f }; // structure initialization -- fancy C syntax
-	for (;;) {
-		osMessageQueueGet(qProcessHandle, &m, NULL, osWaitForever);
-		// analyze message
-		switch (m.type) {
-		case TYPE_U1:
-			cu1 = m.value;
-			break;
-		case TYPE_U2:
-			cu2 = m.value;
-			break;
-		case TYPE_Y1:
-			m.value = cy1;
-//			osMessageQueuePut(qControllerHHandle, &m, 0, 0); // FIXME Wskazać gdzie sterownik procesu ma oddać pomiar
-			break;
-		case TYPE_Y2:
-			m.value = cy2;
-			osMessageQueuePut(qControllerVHandle, &m, 0, 0);
-			break;
-		default:
-			break;
-		}
-	}
+  /* Infinite loop */
+  Message m = {.type = 0,
+               .value = 0.0f};  // structure initialization -- fancy C syntax
+  for (;;) {
+    osMessageQueueGet(qProcessHandle, &m, NULL, osWaitForever);
+    // analyze message
+    switch (m.type) {
+      case TYPE_U1:
+        cu1 = m.value;
+        break;
+      case TYPE_U2:
+        cu2 = m.value;
+        break;
+      case TYPE_Y1:
+        m.value = cy1;
+        //			osMessageQueuePut(qControllerHHandle, &m, 0, 0);
+        ////
+        // FIXME Wskazać gdzie sterownik procesu ma oddać pomiar
+        break;
+      case TYPE_Y2:
+        m.value = cy2;
+        osMessageQueuePut(qControllerVHandle, &m, 0, 0);
+        break;
+      default:
+        break;
+    }
+  }
   /* USER CODE END task_processDriver */
 }
 
@@ -1188,20 +1247,23 @@ void task_processDriver(void *argument)
  * @retval None
  */
 /* USER CODE END Header_task_tsDriver */
-void task_tsDriver(void *argument)
-{
+void task_tsDriver(void *argument) {
   /* USER CODE BEGIN task_tsDriver */
-	/* Infinite loop */
-	TS_StateTypeDef tss = { 0 };
-	for (;;) {
-		osMessageQueueGet(qTSStateHandle, &tss, NULL, osWaitForever);
-		if (tss.touchDetected > 0 && tss.touchX[0] >= 10 && tss.touchX[0] <= 210
-				&& tss.touchY[0] >= 10 && tss.touchY[0] <= 210) {
-			cz1 = (tss.touchX[0] - 110) / 100.0f;
-			cz2 = (tss.touchY[0] - 110) / 100.0f;
-		}
-		// TODO Rozwinąć funkcjonalność o obsługę przycisku do zmiany parametrów PIDa
-	}
+  /* Infinite loop */
+  TS_StateTypeDef tss = {0};
+  for (;;) {
+    osMessageQueueGet(qTSStateHandle, &tss, NULL, osWaitForever);
+    if (tss.touchDetected > 0 && tss.touchX[0] >= 10 && tss.touchX[0] <= 210 &&
+        tss.touchY[0] >= 10 && tss.touchY[0] <= 210) {
+      cz1 = (tss.touchX[0] - 110) / 100.0f;
+      cz2 = (tss.touchY[0] - 110) / 100.0f;
+    }
+    if (tss.touchDetected > 0 && tss.touchX[0] >= 50 && tss.touchX[0] <= 100 &&
+        tss.touchY[0] >= 230 && tss.touchY[0] <= 260) {
+      params_switch != params_switch;
+    }
+    return;
+  }
   /* USER CODE END task_tsDriver */
 }
 
@@ -1212,90 +1274,87 @@ void task_tsDriver(void *argument)
  * @retval None
  */
 /* USER CODE END Header_task_controllerV */
-void task_controllerV(void *argument)
-{
+void task_controllerV(void *argument) {
   /* USER CODE BEGIN task_controllerV */
-	// FIXME osDelay nie nadaje się do implementacji stałych okresów próbkowania
-	// TODO Dodać możliwość zmiany parametrów z wykorzystaniem kolejki
-	/* Infinite loop */
+  // FIXME osDelay nie nadaje się do implementacji stałych okresów próbkowania
+  // TODO Dodać możliwość zmiany parametrów z wykorzystaniem kolejki
+  /* Infinite loop */
   Message m = {0};
-  float y  = 0.0f;
+  float y = 0.0f;
   float e1 = 0.0f;
   float e0 = 0.0f;
-  float u  = 0.0f;
+  float u = 0.0f;
   float up = 0.0f;
   float ui = 0.0f;
   float ud = 0.0f;
 
-  float K  = 4.0f; // przyzwoite parametry regulacji dla Tp = 0.2
-  float Ti = 4.0f; // przyzwoite parametry regulacji dla Tp = 0.2
-  float Td = 0.3f; // przyzwoite parametry regulacji dla Tp = 0.2
+  // float K = 4.0f;   // przyzwoite parametry regulacji dla Tp = 0.2
+  // float Ti = 4.0f;  // przyzwoite parametry regulacji dla Tp = 0.2
+  // float Td = 0.3f;  // przyzwoite parametry regulacji dla Tp = 0.2
   float Tp = 0.2f;
   /* Infinite loop */
-  for(;;)
-  {
-	  m.type = TYPE_Y2;
-	  osMessageQueuePut(qProcessHandle, &m, 1, 0); // send request for Y1
-	  if((osOK == osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_Y2)){ // wait for response, as long as it is required
-		  y = m.value;
-	  }
-	  e0 = cz2-y;
-	  up = K*e0;
-	  ui = ui+K/Ti*Tp*(e1+e0)/2.0f;
-	  ud = K*Td*(e0-e1)/Tp;
-	  u = up+ui+ud;
-	  if(u > 1.0f)
-	  	u = 1.0f;
-	  if(u < -1.0f)
-	  	u = -1.0f;
+  for (;;) {
+    m.type = TYPE_Y2;
+    osMessageQueuePut(qProcessHandle, &m, 1, 0);  // send request for Y1
+    if ((osOK ==
+         osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) &&
+        (m.type == TYPE_Y2)) {  // wait for response, as long as it is required
+      y = m.value;
+    }
+    e0 = cz2 - y;
+    up = controller_params.Kp * e0;
+    ui = ui +
+         controller_params.Kp / controller_params.Ki * Tp * (e1 + e0) / 2.0f;
+    ud = controller_params.Kp * controller_params.Kd * (e0 - e1) / Tp;
+    u = up + ui + ud;
+    if (u > 1.0f) u = 1.0f;
+    if (u < -1.0f) u = -1.0f;
 
-	  m.type = TYPE_U2;
-	  m.value = u;
-	  osMessageQueuePut(qProcessHandle, &m, 1, 0);
+    m.type = TYPE_U2;
+    m.value = u;
+    osMessageQueuePut(qProcessHandle, &m, 1, 0);
 
-	  e1 = e0;
+    e1 = e0;
   }
   /* USER CODE END task_controllerV */
 }
 
-void task_controllerH(void *argument)
-{
+void task_controllerH(void *argument) {
   Message m = {0};
-  float y  = 0.0f;
+  float y = 0.0f;
   float e1 = 0.0f;
   float e0 = 0.0f;
-  float u  = 0.0f;
+  float u = 0.0f;
   float up = 0.0f;
   float ui = 0.0f;
   float ud = 0.0f;
 
-  float K  = 4.0f; // przyzwoite parametry regulacji dla Tp = 0.2
-  float Ti = 4.0f; // przyzwoite parametry regulacji dla Tp = 0.2
-  float Td = 0.3f; // przyzwoite parametry regulacji dla Tp = 0.2
+  float K = 4.0f;   // przyzwoite parametry regulacji dla Tp = 0.2
+  float Ti = 4.0f;  // przyzwoite parametry regulacji dla Tp = 0.2
+  float Td = 0.3f;  // przyzwoite parametry regulacji dla Tp = 0.2
   float Tp = 0.2f;
   /* Infinite loop */
-  for(;;)
-  {
-	  m.type = TYPE_Y2;
-	  osMessageQueuePut(qProcessHandle, &m, 1, 0); // send request for Y1
-	  if((osOK == osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) && (m.type == TYPE_Y2)){ // wait for response, as long as it is required
-		  y = m.value;
-	  }
-	  e0 = cz2-y;
-	  up = K*e0;
-	  ui = ui+K/Ti*Tp*(e1+e0)/2.0f;
-	  ud = K*Td*(e0-e1)/Tp;
-	  u = up+ui+ud;
-	  if(u > 1.0f)
-	  	u = 1.0f;
-	  if(u < -1.0f)
-	  	u = -1.0f;
+  for (;;) {
+    m.type = TYPE_Y2;
+    osMessageQueuePut(qProcessHandle, &m, 1, 0);  // send request for Y1
+    if ((osOK ==
+         osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) &&
+        (m.type == TYPE_Y2)) {  // wait for response, as long as it is required
+      y = m.value;
+    }
+    e0 = cz2 - y;
+    up = K * e0;
+    ui = ui + K / Ti * Tp * (e1 + e0) / 2.0f;
+    ud = K * Td * (e0 - e1) / Tp;
+    u = up + ui + ud;
+    if (u > 1.0f) u = 1.0f;
+    if (u < -1.0f) u = -1.0f;
 
-	  m.type = TYPE_U2;
-	  m.value = u;
-	  osMessageQueuePut(qProcessHandle, &m, 1, 0);
+    m.type = TYPE_U2;
+    m.value = u;
+    osMessageQueuePut(qProcessHandle, &m, 1, 0);
 
-	  e1 = e0;
+    e1 = e0;
   }
   /* USER CODE END task_controllerV */
 }
@@ -1307,8 +1366,7 @@ void task_controllerH(void *argument)
  * @retval None
  */
 /* USER CODE END Header_task_staticAnimation */
-void task_staticAnimation(void *argument)
-{
+void task_staticAnimation(void *argument) {
   /* USER CODE BEGIN task_staticAnimation */
 	/* Infinite loop */
 	// TODO Zaimplementować animację -- obracający się obiekt o stałej prędkości obrotowej bez wzlędu na wartość w osDelay(.)
@@ -1344,17 +1402,6 @@ void task_staticAnimation(void *argument)
 
     osMessageQueuePut(qDrawHandle, &Xlist, NULL, osWaitForever);
     osMessageQueuePut(qDrawHandle, &Ylist, NULL, osWaitForever);
-
-		Ylist[0] = (uint16_t)(cos(angle)*half_len) + center_y;
-
-		Xlist[1] = (uint16_t)(sin(angle+M_PI/2)*half_len) + center_x;
-		Ylist[1] = (uint16_t)(cos(angle+M_PI/2)*half_len) + center_y;
-
-		Xlist[2] = (uint16_t)(sin(angle+M_PI)*half_len) + center_x;
-		Ylist[2] = (uint16_t)(cos(angle+M_PI)*half_len) + center_y;
-
-		Xlist[3] = (uint16_t)(sin(angle+M_PI/2+M_PI)*half_len) + center_x;
-		Ylist[3] = (uint16_t)(cos(angle+M_PI/2+M_PI)*half_len) + center_y;
 
 		osDelay(1);
 
@@ -1466,47 +1513,45 @@ void task_procesManager(void *argument)
 }
 
 /* timer_process function */
-void timer_process(void *argument)
-{
+void timer_process(void *argument) {
   /* USER CODE BEGIN timer_process */
-	static float y1[3] = { 0.0f };
-	static float u1[2] = { 0.0f };
-	static float y2[3] = { 0.0f };
-	static float u2[2] = { 0.0f };
-	const float a0 = -1.96535974577750070000f;
-	const float a1 = +0.96560541625756646000f;
-	const float b0 = +0.00012355177027502316f;
-	const float b1 = +0.00012211870979073302f;
+  static float y1[3] = {0.0f};
+  static float u1[2] = {0.0f};
+  static float y2[3] = {0.0f};
+  static float u2[2] = {0.0f};
+  const float a0 = -1.96535974577750070000f;
+  const float a1 = +0.96560541625756646000f;
+  const float b0 = +0.00012355177027502316f;
+  const float b1 = +0.00012211870979073302f;
 
-	u1[1] = u1[0];
-	u1[0] = cu1;
-	y1[2] = y1[1];
-	y1[1] = y1[0];
-	y1[0] = 0.0f;
-	y1[0] = y1[0] + b0 * u1[0] + b1 * u1[1] - a0 * y1[1] - a1 * y1[2];
+  u1[1] = u1[0];
+  u1[0] = cu1;
+  y1[2] = y1[1];
+  y1[1] = y1[0];
+  y1[0] = 0.0f;
+  y1[0] = y1[0] + b0 * u1[0] + b1 * u1[1] - a0 * y1[1] - a1 * y1[2];
 
-	u2[1] = u2[0];
-	u2[0] = cu2;
-	y2[2] = y2[1];
-	y2[1] = y2[0];
-	y2[0] = 0.0f;
-	y2[0] = y2[0] + b0 * u2[0] + b1 * u2[1] - a0 * y2[1] - a1 * y2[2];
+  u2[1] = u2[0];
+  u2[0] = cu2;
+  y2[2] = y2[1];
+  y2[1] = y2[0];
+  y2[0] = 0.0f;
+  y2[0] = y2[0] + b0 * u2[0] + b1 * u2[1] - a0 * y2[1] - a1 * y2[2];
 
-	cy1 = y1[0];
-	cy2 = y2[0];
+  cy1 = y1[0];
+  cy2 = y2[0];
   /* USER CODE END timer_process */
 }
 
 /**
-  * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM5 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
-  * @param  htim : TIM handle
-  * @retval None
-  */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
+ * @brief  Period elapsed callback in non blocking mode
+ * @note   This function is called  when TIM5 interrupt took place, inside
+ * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+ * a global variable "uwTick" used as application time base.
+ * @param  htim : TIM handle
+ * @retval None
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
@@ -1519,30 +1564,30 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
-void Error_Handler(void)
-{
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
+void Error_Handler(void) {
   /* USER CODE BEGIN Error_Handler_Debug */
-	/* User can add his own implementation to report the HAL error return state */
+  /* User can add his own implementation to report the HAL error return state */
 
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
-void assert_failed(uint8_t *file, uint32_t line)
-{
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
+void assert_failed(uint8_t *file, uint32_t line) {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the file name and line
+     number,
+     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line)
+   */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
