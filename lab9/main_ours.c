@@ -1258,8 +1258,8 @@ void task_tsDriver(void *argument) {
       cz1 = (tss.touchX[0] - 110) / 100.0f;
       cz2 = (tss.touchY[0] - 110) / 100.0f;
     }
-    if (tss.touchDetected > 0 && tss.touchX[0] >= 50 && tss.touchX[0] <= 100 &&
-        tss.touchY[0] >= 230 && tss.touchY[0] <= 260) {
+    if (tss.touchDetected > 0 && tss.touchX[0] >= 250 && tss.touchX[0] <= 300 &&
+        tss.touchY[1] >= 230 && tss.touchY[1] <= 260) {
       params_switch != params_switch;
     }
     return;
@@ -1279,14 +1279,14 @@ void timer_controllerV(void *argument) {
   // FIXME osDelay nie nadaje się do implementacji stałych okresów próbkowania
   // TODO Dodać możliwość zmiany parametrów z wykorzystaniem kolejki
   /* Infinite loop */
-  Message m = {0};
-  float y = 0.0f;
-  float e1 = 0.0f;
-  float e0 = 0.0f;
-  float u = 0.0f;
-  float up = 0.0f;
-  float ui = 0.0f;
-  float ud = 0.0f;
+  static Message m = {0};
+  static float y = 0.0f;
+  static float e1 = 0.0f;
+  static float e0 = 0.0f;
+  static float u = 0.0f;
+  static float up = 0.0f;
+  static float ui = 0.0f;
+  static float ud = 0.0f;
 
   // float K = 4.0f;   // przyzwoite parametry regulacji dla Tp = 0.2
   // float Ti = 4.0f;  // przyzwoite parametry regulacji dla Tp = 0.2
@@ -1295,78 +1295,78 @@ void timer_controllerV(void *argument) {
   TickMessage msg;
   msg.type = PROCES_MANAGER_PID_V;
   /* Infinite loop */
-  for (;;) {
-    m.type = TYPE_Y2;
-    osMessageQueuePut(qProcessHandle, &m, 1, 0);  // send request for Y1
-    if ((osOK ==
-         osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) &&
-        (m.type == TYPE_Y2)) {  // wait for response, as long as it is required
-      y = m.value;
-    }
-    e0 = cz2 - y;
-    up = controller_params.Kp * e0;
-    ui = ui +
-         controller_params.Kp / controller_params.Ki * Tp * (e1 + e0) / 2.0f;
-    ud = controller_params.Kp * controller_params.Kd * (e0 - e1) / Tp;
-    u = up + ui + ud;
-    if (u > 1.0f) u = 1.0f;
-    if (u < -1.0f) u = -1.0f;
-
-    m.type = TYPE_U2;
-    m.value = u;
-    osMessageQueuePut(qProcessHandle, &m, 1, 0);
-
-    e1 = e0;
-
-    msg.value = osKernelGetTickCount();
-		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
+  // for (;;) {
+  m.type = TYPE_Y2;
+  osMessageQueuePut(qProcessHandle, &m, 1, 0);  // send request for Y1
+  if ((osOK ==
+        osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) &&
+      (m.type == TYPE_Y2)) {  // wait for response, as long as it is required
+    y = m.value;
   }
+  e0 = cz2 - y;
+  up = controller_params.Kp * e0;
+  ui = ui +
+        controller_params.Kp / controller_params.Ki * Tp * (e1 + e0) / 2.0f;
+  ud = controller_params.Kp * controller_params.Kd * (e0 - e1) / Tp;
+  u = up + ui + ud;
+  if (u > 1.0f) u = 1.0f;
+  if (u < -1.0f) u = -1.0f;
+
+  m.type = TYPE_U2;
+  m.value = u;
+  osMessageQueuePut(qProcessHandle, &m, 1, 0);
+
+  e1 = e0;
+
+  msg.value = osKernelGetTickCount();
+  osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
+  // }
   /* USER CODE END task_controllerV */
 }
 
 void timer_controllerH(void *argument) {
-  Message m = {0};
-  float y = 0.0f;
-  float e1 = 0.0f;
-  float e0 = 0.0f;
-  float u = 0.0f;
-  float up = 0.0f;
-  float ui = 0.0f;
-  float ud = 0.0f;
+  static Message m = {0};
+  static float y = 0.0f;
+  static float e1 = 0.0f;
+  static float e0 = 0.0f;
+  static float u = 0.0f;
+  static float up = 0.0f;
+  static float ui = 0.0f;
+  static float ud = 0.0f;
 
-  float K = 4.0f;   // przyzwoite parametry regulacji dla Tp = 0.2
-  float Ti = 4.0f;  // przyzwoite parametry regulacji dla Tp = 0.2
-  float Td = 0.3f;  // przyzwoite parametry regulacji dla Tp = 0.2
-  float Tp = 0.2f;
+  static float K = 4.0f;   // przyzwoite parametry regulacji dla Tp = 0.2
+  static float Ti = 4.0f;  // przyzwoite parametry regulacji dla Tp = 0.2
+  static float Td = 0.3f;  // przyzwoite parametry regulacji dla Tp = 0.2
+  static float Tp = 0.2f;
 
-  TickMessage msg;
+  static TickMessage msg;
   msg.type = PROCES_MANAGER_PID_H;
   /* Infinite loop */
-  for (;;) {
-    m.type = TYPE_Y2;
-    osMessageQueuePut(qProcessHandle, &m, 1, 0);  // send request for Y1
-    if ((osOK ==
-         osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) &&
-        (m.type == TYPE_Y2)) {  // wait for response, as long as it is required
-      y = m.value;
-    }
-    e0 = cz2 - y;
-    up = K * e0;
-    ui = ui + K / Ti * Tp * (e1 + e0) / 2.0f;
-    ud = K * Td * (e0 - e1) / Tp;
-    u = up + ui + ud;
-    if (u > 1.0f) u = 1.0f;
-    if (u < -1.0f) u = -1.0f;
-
-    m.type = TYPE_U2;
-    m.value = u;
-    osMessageQueuePut(qProcessHandle, &m, 1, 0);
-
-    e1 = e0;
-
-    msg.value = osKernelGetTickCount();
-		osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
+  // for (;;) {
+  m.type = TYPE_Y2;
+  osMessageQueuePut(qProcessHandle, &m, 1, 0);  // send request for Y1
+  if ((osOK ==
+        osMessageQueueGet(qControllerVHandle, &m, NULL, osWaitForever)) &&
+      (m.type == TYPE_Y2)) {  // wait for response, as long as it is required
+    y = m.value;
   }
+  e0 = cz2 - y;
+  up = K * e0;
+  ui = ui + K / Ti * Tp * (e1 + e0) / 2.0f;
+  ud = K * Td * (e0 - e1) / Tp;
+  u = up + ui + ud;
+  if (u > 1.0f) u = 1.0f;
+  if (u < -1.0f) u = -1.0f;
+
+  m.type = TYPE_U2;
+  m.value = u;
+  osMessageQueuePut(qProcessHandle, &m, 1, 0);
+
+  e1 = e0;
+
+  msg.value = osKernelGetTickCount();
+  osMessageQueuePut(qProcesManagerHandle, &msg, NULL, osWaitForever);
+  // }
   /* USER CODE END task_controllerV */
 }
 
