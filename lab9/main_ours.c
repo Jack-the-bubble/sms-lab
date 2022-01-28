@@ -1281,10 +1281,13 @@ void task_procesManager(void *argument)
   uint64_t pidV_times[array_size] = {0};
   uint64_t pidH_times[array_size] = {0};
   uint64_t staticAnimation_times[array_size] = {0};
-  uint64_t pidSwitch_times[array_size] = {0};
 
   uint64_t pidV_first = 0;
   uint64_t pidV_last = 0;
+  uint64_t pidH_first = 0;
+  uint64_t pidH_last = 0;
+  uint64_t animation_first = 0;
+  uint64_t animation_last = 0;
 
   ManagerMessage msg; //wiadomosc ze zliczeniami dla kolejnych procesów
   msg.type = TASK_MANAGER_COUNTS;
@@ -1326,7 +1329,7 @@ void task_procesManager(void *argument)
 
     pidH_times[pidH_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
 
-    //sprawdzic, czy pidV_last nie wskazuje na zbyt stare dane
+    //sprawdzic, czy pidH_last nie wskazuje na zbyt stare dane
     while (current_ticks - pidH_times[pidH_last] > 1000)
     {
       pidH_last = (pidH_last + 1) % array_size;
@@ -1346,24 +1349,24 @@ void task_procesManager(void *argument)
     if((osOK == osMessageQueueGet(qProcesManagerHandle, &tick_msg, NULL, osWaitForever)) && (tick_msg.type == PROCES_MANAGER_PID_V)){ // wait for response, as long as it is required
 		  y = m.value;
 	  }
-    pidA_first = (pidA_first++) % array_size;
+    animation_first = (animation_first++) % array_size;
 
-    pidA_times[pidA_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
+    staticAnimation_times[animation_first] = y;  //oblicz indeks nowej wartosci i tam zapisz
 
-    //sprawdzic, czy pidV_last nie wskazuje na zbyt stare dane
-    while (current_ticks - pidA_times[pidA_last] > 1000)
+    //sprawdzic, czy pidA_last nie wskazuje na zbyt stare dane
+    while (current_ticks - staticAnimation_times[animation_last] > 1000)
     {
-      pidA_last = (pidA_last + 1) % array_size;
+      animation_last = (animation_last + 1) % array_size;
     }
 
     // oblicz ile razy task byl wykonany
-    if (pidA_first >= pidA_last)
+    if (animation_first >= animation_last)
     {
-      msg.val3 = pidA_first - pidA_last;
+      msg.val3 = animation_first - animation_last;
     }
     else
     {
-      msg.val3 = pidA_first + array_size - pidA_last;
+      msg.val3 = animation_first + array_size - animation_last;
     }
 
     osMessageQueuePut(qProcesLCDManagerHandle, &msg, 1, 0);
